@@ -1,0 +1,68 @@
+# cloudbuild.yaml - CI/CD Pipeline
+steps:
+  # Install dependencies
+  - name: 'python:3.11'
+    entrypoint: pip
+    args: ['install', '-r', 'requirements.txt', '-t', '.']
+    
+  # Run tests
+  - name: 'python:3.11'
+    entrypoint: python
+    args: ['-m', 'pytest', 'tests/', '-v', '--cov=.']
+    
+  # Build frontend
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['install']
+    dir: 'frontend'
+    
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['run', 'build']
+    dir: 'frontend'
+    env:
+      - 'REACT_APP_API_URL=https://api.agentiqware.com/v1'
+      - 'REACT_APP_ENVIRONMENT=production'
+    
+  # Deploy Cloud Functions
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud functions deploy execute_flow \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 512MB \
+          --timeout 540s \
+          --set-env-vars PROJECT_ID=${PROJECT_ID} \
+          --region us-central1
+        
+        gcloud functions deploy generate_flow_ai \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 1GB \
+          --timeout 300s \
+          --set-env-vars ANTHROPIC_API_KEY=${_ANTHROPIC_API_KEY} \
+          --region us-central1
+        
+        gcloud functions deploy register_user \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 256MB \
+          --timeout 60s \
+          --region us-central1
+  
+  # Deploy to App Engine
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args: ['app', 'deploy', '--quiet']
+
+# Substitutions for sensitive data
+substitutions:
+  _ANTHROPIC_API_KEY: ${SECRET_ANTHROPIC_API_KEY}
+  
+timeout: '1200s'

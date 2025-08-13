@@ -1,0 +1,32 @@
+# monitoring/prometheus.yml - Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'agentiqware-api'
+    static_configs:
+      - targets: ['api.agentiqware.com:9090']
+    
+  - job_name: 'cloud-functions'
+    gce_sd_configs:
+      - project: agentiqware-prod
+        zone: us-central1-a
+        port: 9091
+        filter: 'labels.app="agentiqware"'
+
+  - job_name: 'firestore'
+    static_configs:
+      - targets: ['monitoring.googleapis.com']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'firestore_.*'
+        action: keep
+
+rule_files:
+  - 'alerts.yml'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

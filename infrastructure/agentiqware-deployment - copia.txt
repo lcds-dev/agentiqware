@@ -1,0 +1,623 @@
+# =====================================
+# Agentiqware - Google Cloud Platform Deployment
+# =====================================
+
+# app.yaml - App Engine Configuration
+runtime: python311
+env: standard
+instance_class: F2
+
+automatic_scaling:
+  min_instances: 2
+  max_instances: 100
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.7
+  max_concurrent_requests: 50
+
+env_variables:
+  PROJECT_ID: "agentiqware-prod"
+  ENVIRONMENT: "production"
+  
+vpc_access_connector:
+  name: "projects/agentiqware-prod/locations/us-central1/connectors/vpc-connector"
+
+handlers:
+  - url: /api/.*
+    script: auto
+    secure: always
+  
+  - url: /health
+    script: auto
+    
+  - url: /.*
+    static_files: frontend/build/index.html
+    upload: frontend/build/index.html
+    secure: always
+
+---
+# cloudbuild.yaml - CI/CD Pipeline
+steps:
+  # Install dependencies
+  - name: 'python:3.11'
+    entrypoint: pip
+    args: ['install', '-r', 'requirements.txt', '-t', '.']
+    
+  # Run tests
+  - name: 'python:3.11'
+    entrypoint: python
+    args: ['-m', 'pytest', 'tests/', '-v', '--cov=.']
+    
+  # Build frontend
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['install']
+    dir: 'frontend'
+    
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['run', 'build']
+    dir: 'frontend'
+    env:
+      - 'REACT_APP_API_URL=https://api.agentiqware.com/v1'
+      - 'REACT_APP_ENVIRONMENT=production'
+    
+  # Deploy Cloud Functions
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud functions deploy execute_flow \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 512MB \
+          --timeout 540s \
+          --set-env-vars PROJECT_ID=${PROJECT_ID} \
+          --region us-central1
+        
+        gcloud functions deploy generate_flow_ai \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 1GB \
+          --timeout 300s \
+          --set-env-vars ANTHROPIC_API_KEY=${_ANTHROPIC_API_KEY} \
+          --region us-central1
+        
+        gcloud functions deploy register_user \
+          --runtime python311 \
+          --trigger-http \
+          --allow-unauthenticated \
+          --memory 256MB \
+          --timeout 60s \
+          --region us-central1
+  
+  # Deploy to App Engine
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args: ['app', 'deploy', '--quiet']
+
+# Substitutions for sensitive data
+substitutions:
+  _ANTHROPIC_API_KEY: ${SECRET_ANTHROPIC_API_KEY}
+  
+timeout: '1200s'
+
+---
+# terraform/main.tf - Infrastructure as Code
+terraform {
+  required_version = ">= 1.0"
+  
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+  }
+  
+  backend "gcs" {
+    bucket = "agentiqware-terraform-state"
+    prefix = "terraform/state"
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+# Variables
+variable "project_id" {
+  default = "agentiqware-prod"
+}
+
+variable "region" {
+  default = "us-central1"
+}
+
+variable "environment" {
+  default = "production"
+}
+
+# Firestore Database
+resource "google_firestore_database" "database" {
+  project     = var.project_id
+  name        = "(default)"
+  location_id = var.region
+  type        = "FIRESTORE_NATIVE"
+  
+  concurrency_mode            = "OPTIMISTIC"
+  app_engine_integration_mode = "DISABLED"
+}
+
+# Firestore Indexes
+resource "google_firestore_index" "flows_user_created" {
+  project    = var.project_id
+  database   = google_firestore_database.database.name
+  collection = "flows"
+  
+  fields {
+    field_path = "user_id"
+    order      = "ASCENDING"
+  }
+  
+  fields {
+    field_path = "created_at"
+    order      = "DESCENDING"
+  }
+}
+
+resource "google_firestore_index" "executions_flow_status" {
+  project    = var.project_id
+  database   = google_firestore_database.database.name
+  collection = "executions"
+  
+  fields {
+    field_path = "flow_id"
+    order      = "ASCENDING"
+  }
+  
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+  
+  fields {
+    field_path = "created_at"
+    order      = "DESCENDING"
+  }
+}
+
+# Cloud Storage Buckets
+resource "google_storage_bucket" "user_files" {
+  name          = "${var.project_id}-user-files"
+  location      = var.region
+  force_destroy = false
+  
+  uniform_bucket_level_access = true
+  
+  versioning {
+    enabled = true
+  }
+  
+  lifecycle_rule {
+    condition {
+      age = 90
+    }
+    action {
+      type = "Delete"
+    }
+  }
+  
+  cors {
+    origin          = ["https://agentiqware.com"]
+    method          = ["GET", "POST", "PUT", "DELETE"]
+    response_header = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
+resource "google_storage_bucket" "flow_templates" {
+  name          = "${var.project_id}-flow-templates"
+  location      = var.region
+  force_destroy = false
+  
+  uniform_bucket_level_access = true
+  
+  versioning {
+    enabled = true
+  }
+}
+
+# Cloud Scheduler Jobs
+resource "google_cloud_scheduler_job" "cleanup_old_executions" {
+  name             = "cleanup-old-executions"
+  description      = "Clean up execution logs older than 30 days"
+  schedule         = "0 2 * * *"
+  time_zone        = "UTC"
+  attempt_deadline = "320s"
+  
+  http_target {
+    uri         = "https://us-central1-${var.project_id}.cloudfunctions.net/cleanup_executions"
+    http_method = "POST"
+    
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+}
+
+# Service Accounts
+resource "google_service_account" "app_engine" {
+  account_id   = "app-engine-sa"
+  display_name = "App Engine Service Account"
+}
+
+resource "google_service_account" "cloud_functions" {
+  account_id   = "cloud-functions-sa"
+  display_name = "Cloud Functions Service Account"
+}
+
+resource "google_service_account" "scheduler" {
+  account_id   = "scheduler-sa"
+  display_name = "Cloud Scheduler Service Account"
+}
+
+# IAM Bindings
+resource "google_project_iam_member" "app_engine_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.app_engine.email}"
+}
+
+resource "google_project_iam_member" "app_engine_storage" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.app_engine.email}"
+}
+
+resource "google_project_iam_member" "functions_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# VPC Network
+resource "google_compute_network" "vpc" {
+  name                    = "agentiqware-vpc"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "subnet" {
+  name          = "agentiqware-subnet"
+  ip_cidr_range = "10.0.0.0/24"
+  region        = var.region
+  network       = google_compute_network.vpc.id
+  
+  private_ip_google_access = true
+}
+
+# VPC Connector for App Engine
+resource "google_vpc_access_connector" "connector" {
+  name          = "vpc-connector"
+  region        = var.region
+  ip_cidr_range = "10.1.0.0/28"
+  network       = google_compute_network.vpc.name
+  
+  min_instances = 2
+  max_instances = 10
+}
+
+# Cloud Armor Security Policy
+resource "google_compute_security_policy" "policy" {
+  name = "agentiqware-security-policy"
+  
+  rule {
+    action   = "deny(403)"
+    priority = "1000"
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["9.9.9.0/24"]
+      }
+    }
+    description = "Deny access to specific IP range"
+  }
+  
+  rule {
+    action   = "rate_based_ban"
+    priority = "2000"
+    
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      
+      rate_limit_threshold {
+        count        = 100
+        interval_sec = 60
+      }
+      
+      ban_duration_sec = 600
+    }
+    
+    description = "Rate limiting rule"
+  }
+  
+  rule {
+    action   = "allow"
+    priority = "2147483647"
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    description = "Default allow rule"
+  }
+}
+
+# Cloud CDN
+resource "google_compute_backend_bucket" "static_content" {
+  name        = "agentiqware-static-content"
+  bucket_name = google_storage_bucket.static_assets.name
+  enable_cdn  = true
+  
+  cdn_policy {
+    cache_mode        = "CACHE_ALL_STATIC"
+    client_ttl        = 3600
+    default_ttl       = 3600
+    max_ttl          = 86400
+    negative_caching = true
+    
+    negative_caching_policy {
+      code = 404
+      ttl  = 120
+    }
+  }
+}
+
+resource "google_storage_bucket" "static_assets" {
+  name          = "${var.project_id}-static-assets"
+  location      = var.region
+  force_destroy = false
+  
+  website {
+    main_page_suffix = "index.html"
+    not_found_page   = "404.html"
+  }
+}
+
+# Monitoring and Alerting
+resource "google_monitoring_alert_policy" "high_error_rate" {
+  display_name = "High Error Rate Alert"
+  combiner     = "OR"
+  
+  conditions {
+    display_name = "Error rate exceeds 5%"
+    
+    condition_threshold {
+      filter          = "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND metric.labels.status!=\"ok\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.05
+      
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
+    }
+  }
+  
+  notification_channels = [google_monitoring_notification_channel.email.id]
+}
+
+resource "google_monitoring_notification_channel" "email" {
+  display_name = "Email Notification"
+  type         = "email"
+  
+  labels = {
+    email_address = "alerts@agentiqware.com"
+  }
+}
+
+# Outputs
+output "app_url" {
+  value = "https://${var.project_id}.appspot.com"
+}
+
+output "api_url" {
+  value = "https://api.agentiqware.com/v1"
+}
+
+output "firestore_database" {
+  value = google_firestore_database.database.name
+}
+
+---
+# docker-compose.yml - Local Development
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080/api
+      - REACT_APP_ENVIRONMENT=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm start
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - PROJECT_ID=agentiqware-dev
+      - ENVIRONMENT=development
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+      - ./service-account.json:/app/service-account.json:ro
+    command: python main.py
+
+  firestore-emulator:
+    image: google/cloud-sdk:latest
+    ports:
+      - "8081:8081"
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8081
+    environment:
+      - FIRESTORE_PROJECT_ID=agentiqware-dev
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
+
+---
+# .github/workflows/deploy.yml - GitHub Actions CI/CD
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PROJECT_ID: agentiqware-prod
+  REGION: us-central1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+      
+      - name: Build and Deploy
+        run: |
+          gcloud builds submit \
+            --tag gcr.io/$PROJECT_ID/agentiqware \
+            --timeout=20m
+
+---
+# monitoring/prometheus.yml - Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'agentiqware-api'
+    static_configs:
+      - targets: ['api.agentiqware.com:9090']
+    
+  - job_name: 'cloud-functions'
+    gce_sd_configs:
+      - project: agentiqware-prod
+        zone: us-central1-a
+        port: 9091
+        filter: 'labels.app="agentiqware"'
+
+  - job_name: 'firestore'
+    static_configs:
+      - targets: ['monitoring.googleapis.com']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'firestore_.*'
+        action: keep
+
+rule_files:
+  - 'alerts.yml'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+---
+# monitoring/alerts.yml - Alert Rules
+groups:
+  - name: agentiqware_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} (threshold: 0.05)"
+      
+      - alert: LowSuccessRate
+        expr: rate(flow_executions_success[5m]) < 0.95
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Flow success rate below threshold"
+          description: "Success rate is {{ $value }} (threshold: 0.95)"
+      
+      - alert: HighLatency
+        expr: histogram_quantile(0.99, http_request_duration_seconds_bucket) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "99th percentile latency is {{ $value }}s"

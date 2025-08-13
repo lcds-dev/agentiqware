@@ -1,0 +1,35 @@
+# =====================================
+# Agentiqware - Google Cloud Platform Deployment
+# =====================================
+
+# app.yaml - App Engine Configuration
+runtime: python311
+env: standard
+instance_class: F2
+
+automatic_scaling:
+  min_instances: 2
+  max_instances: 100
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.7
+  max_concurrent_requests: 50
+
+env_variables:
+  PROJECT_ID: "agentiqware-prod"
+  ENVIRONMENT: "production"
+  
+vpc_access_connector:
+  name: "projects/agentiqware-prod/locations/us-central1/connectors/vpc-connector"
+
+handlers:
+  - url: /api/.*
+    script: auto
+    secure: always
+  
+  - url: /health
+    script: auto
+    
+  - url: /.*
+    static_files: frontend/build/index.html
+    upload: frontend/build/index.html
+    secure: always
