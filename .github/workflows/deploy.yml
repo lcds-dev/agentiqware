@@ -1,4 +1,4 @@
-name: Deploy to Google Cloud
+name: Deploy to Production
 
 on:
   push:
@@ -13,6 +13,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v3
       
@@ -20,23 +21,39 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-      
-      - name: Install and test frontend
-        working-directory: ./frontend
-        run: |
-          npm ci
-          npm test -- --coverage --watchAll=false
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
       
-      - name: Install and test backend
-        working-directory: ./backend
+      - name: Install frontend dependencies
         run: |
+          cd frontend
+          npm ci
+      
+      - name: Install backend dependencies
+        run: |
+          cd backend
           pip install -r requirements.txt
-          pytest tests/
+          pip install pytest pytest-cov
+      
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false
+      
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest tests/ -v --cov=.
+      
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
 
   deploy:
     needs: test
@@ -53,4 +70,14 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
       
       - name: Deploy to App Engine
-        run: gcloud app deploy --quiet
+        run: |
+          gcloud app deploy --quiet
+      
+      - name: Deploy Cloud Functions
+        run: |
+          cd backend/functions
+          gcloud functions deploy execute_flow \
+            --runtime python311 \
+            --trigger-http \
+            --allow-unauthenticated \
+            --region ${{ env.REGION }}
