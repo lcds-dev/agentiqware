@@ -593,6 +593,7 @@ const FlowEditor = () => {
       const currentX = (e.clientX - rect.left - offset.x) / scale;
       const currentY = (e.clientY - rect.top - offset.y) / scale;
       
+      
       const box = {
         x: Math.min(selectionStart.x, currentX),
         y: Math.min(selectionStart.y, currentY),
@@ -633,16 +634,17 @@ const FlowEditor = () => {
       
       const isCtrlPressed = e.ctrlKey || e.metaKey;
       
+      
+      // Solo iniciar selección por arrastre si no se presiona Ctrl
       if (!isCtrlPressed) {
-        clearSelection();
+        // Iniciar selección por arrastre
+        const startX = (e.clientX - rect.left - offset.x) / scale;
+        const startY = (e.clientY - rect.top - offset.y) / scale;
+        
+        setIsSelecting(true);
+        setSelectionStart({ x: startX, y: startY });
       }
       
-      // Iniciar selección por arrastre
-      const startX = (e.clientX - rect.left - offset.x) / scale;
-      const startY = (e.clientY - rect.top - offset.y) / scale;
-      
-      setIsSelecting(true);
-      setSelectionStart({ x: startX, y: startY });
       setIsDraggingCanvas(false);
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
@@ -725,6 +727,23 @@ const FlowEditor = () => {
   // Cancelar conexión
   const cancelConnection = () => {
     setConnectingFrom(null);
+  };
+
+  // Manejar clic en canvas (para deseleccionar y cancelar conexiones)
+  const handleCanvasClick = (e: any) => {
+    // Verificar si el clic NO fue en un nodo o connection point
+    const isNodeClick = e.target.closest('[data-node-id]');
+    const isConnectionPoint = e.target.classList?.contains('connection-point');
+    
+    if (!isNodeClick && !isConnectionPoint) {
+      // Solo deseleccionar en un clic simple (no después de arrastrar)
+      setTimeout(() => {
+        if (selectedNodes.size > 0) {
+          clearSelection();
+        }
+        cancelConnection();
+      }, 0);
+    }
   };
 
   // Eliminar conexión
@@ -1165,7 +1184,7 @@ const FlowEditor = () => {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onMouseDown={handleCanvasMouseDown}
-          onClick={cancelConnection}
+          onClick={handleCanvasClick}
           style={{
             backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
             backgroundSize: `${20 * scale}px ${20 * scale}px`,
@@ -1199,6 +1218,7 @@ const FlowEditor = () => {
             {nodes.map(node => (
               <div
                 key={node.id}
+                data-node-id={node.id}
                 className={`absolute bg-white rounded-lg shadow-lg p-4 transition-all hover:shadow-xl ${
                   selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                 } ${
@@ -1213,7 +1233,8 @@ const FlowEditor = () => {
                   top: node.position.y,
                   minWidth: '120px'
                 }}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setSelectedNode(node);
                   setShowProperties(true);
                 }}
