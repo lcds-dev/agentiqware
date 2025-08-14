@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
-import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe } from 'lucide-react';
+import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard } from 'lucide-react';
 
 // ============================================
 // Sistema de Internacionalización (i18n)
@@ -117,6 +117,9 @@ const translations = {
     duplicateAll: 'Duplicate All',
     selectAll: 'Select All',
     clearSelection: 'Clear Selection',
+    copyNodes: 'Copy',
+    cutNodes: 'Cut',
+    pasteNodes: 'Paste',
     
     // Platform Description
     platformSubtitle: 'RPA & Digital Agents Platform'
@@ -233,6 +236,9 @@ const translations = {
     duplicateAll: 'Duplicar Todos',
     selectAll: 'Seleccionar Todo',
     clearSelection: 'Limpiar Selección',
+    copyNodes: 'Copiar',
+    cutNodes: 'Cortar',
+    pasteNodes: 'Pegar',
     
     // Platform Description
     platformSubtitle: 'Plataforma de RPA y Agentes Digitales'
@@ -334,6 +340,8 @@ const FlowEditor = () => {
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
   const [selectionStart, setSelectionStart] = useState({ x: 0, y: 0 });
+  const [clipboard, setClipboard] = useState<{nodes: any[], operation: 'copy' | 'cut'} | null>(null);
+  const [cutNodes, setCutNodes] = useState<Set<string>>(new Set());
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -447,10 +455,10 @@ const FlowEditor = () => {
     }
   };
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedNodes(new Set());
     setSelectedNode(null);
-  };
+  }, []);
 
   const selectNodesInBox = (box: {x: number, y: number, width: number, height: number}) => {
     const selected = new Set<string>();
@@ -471,21 +479,8 @@ const FlowEditor = () => {
     setSelectedNodes(selected);
   };
 
-  const deleteSelectedNodes = () => {
-    if (selectedNodes.size > 0) {
-      // Eliminar nodos seleccionados
-      setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
-      
-      // Eliminar conexiones relacionadas
-      setConnections(prev => prev.filter(conn => 
-        !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
-      ));
-      
-      clearSelection();
-    }
-  };
 
-  const duplicateSelectedNodes = () => {
+  const duplicateSelectedNodes = useCallback(() => {
     if (selectedNodes.size > 0) {
       const nodesToDuplicate = nodes.filter(node => selectedNodes.has(node.id));
       const newNodes = nodesToDuplicate.map(node => ({
@@ -503,7 +498,62 @@ const FlowEditor = () => {
       const newNodeIds = new Set(newNodes.map(node => node.id));
       setSelectedNodes(newNodeIds);
     }
-  };
+  }, [selectedNodes, nodes]);
+
+  // Funciones de clipboard
+  const copySelectedNodes = useCallback(() => {
+    if (selectedNodes.size > 0) {
+      const nodesToCopy = nodes.filter(node => selectedNodes.has(node.id));
+      setClipboard({ nodes: nodesToCopy, operation: 'copy' });
+      // Limpiar nodos cortados si había alguno
+      setCutNodes(new Set());
+    }
+  }, [selectedNodes, nodes]);
+
+  const cutSelectedNodes = useCallback(() => {
+    if (selectedNodes.size > 0) {
+      const nodesToCut = nodes.filter(node => selectedNodes.has(node.id));
+      setClipboard({ nodes: nodesToCut, operation: 'cut' });
+      // Marcar nodos como cortados para el estilo visual
+      setCutNodes(new Set(selectedNodes));
+    }
+  }, [selectedNodes, nodes]);
+
+  const pasteNodes = useCallback(() => {
+    if (clipboard && clipboard.nodes.length > 0) {
+      // Generar nuevos IDs para los nodos pegados
+      const pastedNodes = clipboard.nodes.map(node => ({
+        ...node,
+        id: `node_${Date.now()}_${Math.random()}`,
+        position: {
+          x: node.position.x + 50, // Offset para que no se superpongan
+          y: node.position.y + 50
+        }
+      }));
+
+      // Si era cortar, eliminar los nodos originales
+      if (clipboard.operation === 'cut') {
+        const cutNodeIds = new Set(clipboard.nodes.map(n => n.id));
+        setNodes(prev => prev.filter(node => !cutNodeIds.has(node.id)));
+        
+        // Eliminar conexiones relacionadas con los nodos cortados
+        setConnections(prev => prev.filter(conn => 
+          !cutNodeIds.has(conn.from) && !cutNodeIds.has(conn.to)
+        ));
+        
+        // Limpiar estado de cortado
+        setCutNodes(new Set());
+        setClipboard(null);
+      }
+
+      // Agregar los nodos pegados
+      setNodes(prev => [...prev, ...pastedNodes]);
+      
+      // Seleccionar los nodos pegados
+      const pastedNodeIds = new Set(pastedNodes.map(node => node.id));
+      setSelectedNodes(pastedNodeIds);
+    }
+  }, [clipboard]);
 
   // Manejar drag & drop desde sidebar
   const handleDragStart = (e: any, component: any) => {
@@ -754,7 +804,17 @@ const FlowEditor = () => {
   // Manejar teclas
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      deleteSelectedNodes();
+      if (selectedNodes.size > 0) {
+        // Eliminar nodos seleccionados
+        setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
+        
+        // Eliminar conexiones relacionadas
+        setConnections(prev => prev.filter(conn => 
+          !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
+        ));
+        
+        clearSelection();
+      }
     } else if (e.key === 'Escape') {
       clearSelection();
       setConnectingFrom(null);
@@ -764,9 +824,18 @@ const FlowEditor = () => {
         // Seleccionar todos los nodos
         const allNodeIds = new Set(nodes.map(node => node.id));
         setSelectedNodes(allNodeIds);
+      } else if (e.key === 'c') {
+        e.preventDefault();
+        copySelectedNodes();
+      } else if (e.key === 'x') {
+        e.preventDefault();
+        cutSelectedNodes();
+      } else if (e.key === 'v') {
+        e.preventDefault();
+        pasteNodes();
       }
     }
-  }, [selectedNodes, nodes]);
+  }, [selectedNodes, nodes, clearSelection, setConnectingFrom, copySelectedNodes, cutSelectedNodes, pasteNodes]);
 
   // Efectos para event listeners
   useEffect(() => {
@@ -923,7 +992,32 @@ const FlowEditor = () => {
           </button>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={copySelectedNodes}
+            className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition text-sm"
+            title={t('copyNodes')}
+          >
+            <Copy className="w-4 h-4" />
+            {t('copyNodes')}
+          </button>
+          <button
+            onClick={cutSelectedNodes}
+            className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition text-sm"
+            title={t('cutNodes')}
+          >
+            <Scissors className="w-4 h-4" />
+            {t('cutNodes')}
+          </button>
+          <button
+            onClick={pasteNodes}
+            disabled={!clipboard || clipboard.nodes.length === 0}
+            className="flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title={t('pasteNodes')}
+          >
+            <Clipboard className="w-4 h-4" />
+            {t('pasteNodes')}
+          </button>
           <button
             onClick={duplicateSelectedNodes}
             className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm"
@@ -933,7 +1027,19 @@ const FlowEditor = () => {
             {t('duplicateAll')}
           </button>
           <button
-            onClick={deleteSelectedNodes}
+            onClick={() => {
+              if (selectedNodes.size > 0) {
+                // Eliminar nodos seleccionados
+                setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
+                
+                // Eliminar conexiones relacionadas
+                setConnections(prev => prev.filter(conn => 
+                  !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
+                ));
+                
+                clearSelection();
+              }
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
             title={t('deleteAll')}
           >
@@ -1159,6 +1265,19 @@ const FlowEditor = () => {
             >
               {t('clearSelection')}
             </button>
+            {clipboard && clipboard.nodes.length > 0 && (
+              <>
+                <div className="w-px h-6 bg-gray-300 mx-2" />
+                <button
+                  onClick={pasteNodes}
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+                  title={t('pasteNodes')}
+                >
+                  <Clipboard className="w-4 h-4" />
+                  {t('pasteNodes')} ({clipboard.nodes.length})
+                </button>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1223,6 +1342,8 @@ const FlowEditor = () => {
                   selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                 } ${
                   selectedNode?.id === node.id ? 'ring-2 ring-purple-500' : ''
+                } ${
+                  cutNodes.has(node.id) ? 'opacity-50 bg-gray-100 ring-2 ring-dashed ring-orange-400' : ''
                 } ${
                   isDragging && draggedNodes.some(dn => dn.id === node.id)
                     ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 z-50' 
