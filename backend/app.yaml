@@ -1,0 +1,19 @@
+runtime: python311
+env: standard
+instance_class: F2
+
+entrypoint: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.7
+  max_concurrent_requests: 50
+
+env_variables:
+  PROJECT_ID: "agentiqware-prod"
+  ENVIRONMENT: "production"
+  DEBUG: "False"
+  ALLOWED_ORIGINS: "https://agentiqware.com,https://www.agentiqware.com,https://agentiqware-prod.uc.r.appspot.com"
+  ALLOWED_HOSTS: "agentiqware.com,*.agentiqware.com,agentiqware-prod.appspot.com,agentiqware-prod.uc.r.appspot.com,*"

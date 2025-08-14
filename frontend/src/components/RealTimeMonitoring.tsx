@@ -8,25 +8,25 @@ const RealTimeMonitoring = () => {
   const [activeMetric, setActiveMetric] = useState('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(5000);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
   // WebSocket para datos en tiempo real
   const wsRef = useRef(null);
 
   // Datos simulados para las métricas
   const [metrics, setMetrics] = useState({
-    executionsPerMinute: [],
-    successRate: [],
-    averageExecutionTime: [],
-    activeFlows: [],
+    executionsPerMinute: [] as any[],
+    successRate: [] as any[],
+    averageExecutionTime: [] as any[],
+    activeFlows: [] as any[],
     systemResources: {
       cpu: 45,
       memory: 62,
       storage: 38,
       network: 72
     },
-    recentErrors: [],
-    flowPerformance: []
+    recentErrors: [] as any[],
+    flowPerformance: [] as any[]
   });
 
   // Conectar WebSocket para actualizaciones en tiempo real
@@ -54,7 +54,7 @@ const RealTimeMonitoring = () => {
     const now = new Date();
     const timeLabel = now.toLocaleTimeString();
     
-    setMetrics(prev => ({
+    setMetrics((prev: any) => ({
       executionsPerMinute: [
         ...prev.executionsPerMinute.slice(-29),
         {
@@ -108,7 +108,7 @@ const RealTimeMonitoring = () => {
   };
 
   // Agregar notificación
-  const addNotification = (notification) => {
+  const addNotification = (notification: any) => {
     setNotifications(prev => [
       { ...notification, id: Date.now() },
       ...prev.slice(0, 4)
@@ -170,8 +170,8 @@ const RealTimeMonitoring = () => {
   ];
 
   // Componente de métrica clave
-  const KeyMetricCard = ({ metric }) => {
-    const colorClasses = {
+  const KeyMetricCard = ({ metric }: { metric: any }) => {
+    const colorClasses: any = {
       blue: 'bg-blue-100 text-blue-600',
       green: 'bg-green-100 text-green-600',
       purple: 'bg-purple-100 text-purple-600',
@@ -202,8 +202,8 @@ const RealTimeMonitoring = () => {
   };
 
   // Componente de recursos del sistema
-  const SystemResourceCard = ({ label, value, icon: Icon, color }) => {
-    const getColorClass = (value) => {
+  const SystemResourceCard = ({ label, value, icon: Icon, color }: { label: any, value: any, icon: any, color: any }) => {
+    const getColorClass = (value: number) => {
       if (value < 50) return 'text-green-500';
       if (value < 75) return 'text-yellow-500';
       return 'text-red-500';
@@ -286,7 +286,7 @@ const RealTimeMonitoring = () => {
       {/* Notifications */}
       {notifications.length > 0 && (
         <div className="mb-6 space-y-2">
-          {notifications.map(notification => (
+          {notifications.map((notification: any) => (
             <div
               key={notification.id}
               className={`flex items-center gap-3 p-3 rounded-lg border ${
@@ -393,7 +393,7 @@ const RealTimeMonitoring = () => {
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
                 {errorDistribution.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
@@ -433,21 +433,25 @@ const RealTimeMonitoring = () => {
           label="CPU Usage"
           value={metrics.systemResources.cpu}
           icon={Cpu}
+          color="blue"
         />
         <SystemResourceCard
           label="Memory"
           value={metrics.systemResources.memory}
           icon={Server}
+          color="green"
         />
         <SystemResourceCard
           label="Storage"
           value={metrics.systemResources.storage}
           icon={HardDrive}
+          color="purple"
         />
         <SystemResourceCard
           label="Network I/O"
           value={metrics.systemResources.network}
           icon={Wifi}
+          color="indigo"
         />
       </div>
 

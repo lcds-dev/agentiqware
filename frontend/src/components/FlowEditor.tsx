@@ -226,7 +226,7 @@ const translations = {
 };
 
 // Contexto de idioma
-const LanguageContext = createContext();
+const LanguageContext = createContext<any>(null);
 
 // Hook personalizado para usar traducciones
 const useTranslation = () => {
@@ -238,7 +238,7 @@ const useTranslation = () => {
 };
 
 // Proveedor de idioma
-const LanguageProvider = ({ children }) => {
+const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
   const [language, setLanguage] = useState(() => {
     // Obtener idioma guardado o detectar del navegador
     const savedLang = localStorage.getItem('language');
@@ -248,11 +248,11 @@ const LanguageProvider = ({ children }) => {
     return browserLang === 'es' ? 'es' : 'en';
   });
 
-  const t = (key) => {
-    return translations[language][key] || translations['en'][key] || key;
+  const t = (key: string) => {
+    return (translations as any)[language][key] || (translations as any)['en'][key] || key;
   };
 
-  const changeLanguage = (newLang) => {
+  const changeLanguage = (newLang: string) => {
     setLanguage(newLang);
     localStorage.setItem('language', newLang);
   };
@@ -312,15 +312,15 @@ const LanguageSelector = () => {
 // Componente principal del editor con i18n
 const FlowEditor = () => {
   const { t } = useTranslation();
-  const canvasRef = useRef(null);
-  const [nodes, setNodes] = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [nodes, setNodes] = useState<any[]>([]);
+  const [connections, setConnections] = useState<any[]>([]);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [draggedNode, setDraggedNode] = useState(null);
-  const [connectingFrom, setConnectingFrom] = useState(null);
+  const [draggedNode, setDraggedNode] = useState<any>(null);
+  const [connectingFrom, setConnectingFrom] = useState<any>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPrompt, setShowAIPrompt] = useState(false);
@@ -391,10 +391,10 @@ const FlowEditor = () => {
   ];
 
   // Obtener categorías únicas
-  const categories = [...new Set(availableComponents.map(c => c.categoryKey))];
+  const categories = Array.from(new Set(availableComponents.map(c => c.categoryKey)));
 
   // Agregar nodo al canvas
-  const addNode = (component, position) => {
+  const addNode = (component: any, position: any) => {
     const newNode = {
       id: `node_${Date.now()}`,
       type: component.id,
@@ -409,13 +409,14 @@ const FlowEditor = () => {
   };
 
   // Manejar drag & drop
-  const handleDragStart = (e, component) => {
+  const handleDragStart = (e: any, component: any) => {
     e.dataTransfer.setData('component', JSON.stringify(component));
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: any) => {
     e.preventDefault();
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
     const component = JSON.parse(e.dataTransfer.getData('component'));
     const position = {
       x: (e.clientX - rect.left - offset.x) / scale,
@@ -424,21 +425,21 @@ const FlowEditor = () => {
     addNode(component, position);
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: any) => {
     e.preventDefault();
   };
 
   // Manejo del zoom
-  const handleZoom = (delta) => {
+  const handleZoom = (delta: number) => {
     setScale(prev => Math.max(0.3, Math.min(2, prev + delta)));
   };
 
   // Conectar nodos
-  const startConnection = (nodeId, output = 'default') => {
+  const startConnection = (nodeId: string, output = 'default') => {
     setConnectingFrom({ nodeId, output });
   };
 
-  const completeConnection = (nodeId, input = 'default') => {
+  const completeConnection = (nodeId: string, input = 'default') => {
     if (connectingFrom && connectingFrom.nodeId !== nodeId) {
       const newConnection = {
         id: `conn_${Date.now()}`,
@@ -508,16 +509,16 @@ const FlowEditor = () => {
   };
 
   // Panel de propiedades dinámico con traducciones
-  const PropertyPanel = ({ node }) => {
+  const PropertyPanel = ({ node }: { node: any }) => {
     const [formData, setFormData] = useState(node.data || {});
 
-    const handleFieldChange = (field, value) => {
+    const handleFieldChange = (field: string, value: any) => {
       setFormData({ ...formData, [field]: value });
       node.data = { ...formData, [field]: value };
     };
 
-    const getFieldLabel = (field) => {
-      const translationKey = fieldTranslationMap[field];
+    const getFieldLabel = (field: string) => {
+      const translationKey = (fieldTranslationMap as any)[field];
       return translationKey ? t(translationKey) : field.replace(/_/g, ' ').charAt(0).toUpperCase() + field.replace(/_/g, ' ').slice(1);
     };
 
@@ -537,7 +538,7 @@ const FlowEditor = () => {
         </div>
         
         <div className="space-y-4">
-          {node.config.fields?.map(field => (
+          {node.config.fields?.map((field: string) => (
             <div key={field}>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {getFieldLabel(field)}
@@ -757,7 +758,7 @@ const FlowEditor = () => {
                   setShowProperties(true);
                 }}
                 onMouseDown={(e) => {
-                  if (e.target.classList.contains('connection-point')) return;
+                  if ((e.target as any).classList?.contains('connection-point')) return;
                   setDraggedNode(node);
                   setIsDragging(true);
                 }}

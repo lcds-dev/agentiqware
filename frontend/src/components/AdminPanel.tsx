@@ -5,8 +5,8 @@ import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart as RePieChart
 // Admin Panel Component
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('overview');
-  const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [filters, setFilters] = useState({
     status: 'all',
     subscription: 'all',
@@ -234,7 +234,7 @@ const AdminPanel = () => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
                 outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
@@ -439,7 +439,7 @@ const AdminPanel = () => {
   );
 
   // User Detail Modal
-  const UserDetailModal = ({ user, onClose }) => {
+  const UserDetailModal = ({ user, onClose }: { user: any, onClose: () => void }) => {
     if (!user) return null;
 
     return (
