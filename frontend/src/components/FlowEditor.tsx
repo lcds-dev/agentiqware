@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
-import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, ChevronRight, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe } from 'lucide-react';
+import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe } from 'lucide-react';
 
 // ============================================
 // Sistema de Internacionalización (i18n)
@@ -320,7 +320,12 @@ const FlowEditor = () => {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [draggedNode, setDraggedNode] = useState<any>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
+  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [connectingFrom, setConnectingFrom] = useState<any>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  // Removed unused tempConnection state
   const [showProperties, setShowProperties] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPrompt, setShowAIPrompt] = useState(false);
@@ -408,9 +413,76 @@ const FlowEditor = () => {
     return newNode;
   };
 
-  // Manejar drag & drop
+  // Manejar drag & drop desde sidebar
   const handleDragStart = (e: any, component: any) => {
     e.dataTransfer.setData('component', JSON.stringify(component));
+  };
+
+  // Manejar drag de nodos en el canvas
+  const handleNodeMouseDown = (e: any, node: any) => {
+    if ((e.target as any).classList?.contains('connection-point')) return;
+    
+    e.preventDefault();
+    setDraggedNode(node);
+    setIsDragging(true);
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    setDragStart({
+      x: e.clientX - node.position.x * scale - offset.x,
+      y: e.clientY - node.position.y * scale - offset.y
+    });
+  };
+
+  // Manejar movimiento del mouse
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    // Actualizar posición del mouse para conexiones temporales
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePosition({
+        x: (e.clientX - rect.left - offset.x) / scale,
+        y: (e.clientY - rect.top - offset.y) / scale
+      });
+    }
+    
+    if (isDragging && draggedNode) {
+      if (!rect) return;
+      
+      const newX = (e.clientX - dragStart.x - offset.x) / scale;
+      const newY = (e.clientY - dragStart.y - offset.y) / scale;
+      
+      setNodes(prev => prev.map(node => 
+        node.id === draggedNode.id 
+          ? { ...node, position: { x: newX, y: newY } }
+          : node
+      ));
+    } else if (isDraggingCanvas) {
+      const deltaX = e.clientX - lastMousePos.x;
+      const deltaY = e.clientY - lastMousePos.y;
+      
+      setOffset(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }));
+      
+      setLastMousePos({ x: e.clientX, y: e.clientY });
+    }
+  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos]);
+
+  // Manejar fin del drag
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setDraggedNode(null);
+    setIsDraggingCanvas(false);
+  }, []);
+
+  // Manejar drag del canvas
+  const handleCanvasMouseDown = (e: any) => {
+    if (e.target === canvasRef.current || e.target.closest('.canvas-background')) {
+      setIsDraggingCanvas(true);
+      setLastMousePos({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleDrop = (e: any) => {
@@ -430,9 +502,33 @@ const FlowEditor = () => {
   };
 
   // Manejo del zoom
-  const handleZoom = (delta: number) => {
-    setScale(prev => Math.max(0.3, Math.min(2, prev + delta)));
-  };
+  const handleZoom = useCallback((delta: number, mousePos?: { x: number, y: number }) => {
+    const newScale = Math.max(0.3, Math.min(2, scale + delta));
+    
+    if (mousePos && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = mousePos.x - rect.left;
+      const mouseY = mousePos.y - rect.top;
+      
+      // Ajustar offset para que el zoom se centre en la posición del mouse
+      const deltaScale = newScale - scale;
+      setOffset(prev => ({
+        x: prev.x - (mouseX * deltaScale) / newScale,
+        y: prev.y - (mouseY * deltaScale) / newScale
+      }));
+    }
+    
+    setScale(newScale);
+  }, [scale]);
+
+  // Manejar wheel para zoom
+  const handleWheel = useCallback((e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.001;
+      handleZoom(delta, { x: e.clientX, y: e.clientY });
+    }
+  }, [handleZoom]);
 
   // Conectar nodos
   const startConnection = (nodeId: string, output = 'default') => {
@@ -441,29 +537,106 @@ const FlowEditor = () => {
 
   const completeConnection = (nodeId: string, input = 'default') => {
     if (connectingFrom && connectingFrom.nodeId !== nodeId) {
-      const newConnection = {
-        id: `conn_${Date.now()}`,
-        from: connectingFrom.nodeId,
-        fromOutput: connectingFrom.output,
-        to: nodeId,
-        toInput: input
-      };
-      setConnections([...connections, newConnection]);
+      // Verificar que no exista ya una conexión
+      const existingConnection = connections.find(conn => 
+        conn.from === connectingFrom.nodeId && 
+        conn.to === nodeId &&
+        conn.fromOutput === connectingFrom.output &&
+        conn.toInput === input
+      );
+      
+      if (!existingConnection) {
+        const newConnection = {
+          id: `conn_${Date.now()}`,
+          from: connectingFrom.nodeId,
+          fromOutput: connectingFrom.output,
+          to: nodeId,
+          toInput: input
+        };
+        setConnections([...connections, newConnection]);
+      }
       setConnectingFrom(null);
     }
   };
 
+  // Cancelar conexión
+  const cancelConnection = () => {
+    setConnectingFrom(null);
+  };
+
+  // Eliminar conexión
+  const removeConnection = (connectionId: string) => {
+    setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+  };
+
+  // Efectos para event listeners
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    const currentCanvas = canvasRef.current;
+    if (currentCanvas) {
+      currentCanvas.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      if (currentCanvas) {
+        currentCanvas.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [handleMouseMove, handleMouseUp, handleWheel]);
+
   // Renderizar conexiones
   const renderConnections = () => {
-    return connections.map(conn => {
+    const allConnections = [...connections];
+    
+    // Añadir conexión temporal si se está conectando
+    if (connectingFrom) {
+      const fromNode = nodes.find(n => n.id === connectingFrom.nodeId);
+      if (fromNode) {
+        const tempConn = {
+          id: 'temp',
+          from: connectingFrom.nodeId,
+          fromOutput: connectingFrom.output,
+          to: 'mouse',
+          toInput: 'default',
+          isTemp: true
+        };
+        allConnections.push(tempConn);
+      }
+    }
+    
+    return allConnections.map(conn => {
       const fromNode = nodes.find(n => n.id === conn.from);
-      const toNode = nodes.find(n => n.id === conn.to);
-      if (!fromNode || !toNode) return null;
-
-      const x1 = fromNode.position.x + 120;
-      const y1 = fromNode.position.y + 40;
-      const x2 = toNode.position.x;
-      const y2 = toNode.position.y + 40;
+      if (!fromNode) return null;
+      
+      let x1, y1, x2, y2;
+      
+      // Calcular punto de salida
+      if (conn.fromOutput === 'true') {
+        x1 = fromNode.position.x + 40;
+        y1 = fromNode.position.y + 80;
+      } else if (conn.fromOutput === 'false') {
+        x1 = fromNode.position.x + 80;
+        y1 = fromNode.position.y + 80;
+      } else {
+        x1 = fromNode.position.x + 120;
+        y1 = fromNode.position.y + 40;
+      }
+      
+      // Calcular punto de llegada
+      if (conn.to === 'mouse') {
+        x2 = mousePosition.x;
+        y2 = mousePosition.y;
+      } else {
+        const toNode = nodes.find(n => n.id === conn.to);
+        if (!toNode) return null;
+        x2 = toNode.position.x;
+        y2 = toNode.position.y + 40;
+      }
 
       const dx = x2 - x1;
       const cp1x = x1 + dx * 0.5;
@@ -472,14 +645,35 @@ const FlowEditor = () => {
       const cp2y = y2;
 
       return (
-        <path
-          key={conn.id}
-          d={`M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`}
-          stroke="#6366f1"
-          strokeWidth="2"
-          fill="none"
-          className="transition-all hover:stroke-blue-400"
-        />
+        <g key={conn.id}>
+          <path
+            d={`M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`}
+            stroke={conn.isTemp ? '#94a3b8' : conn.fromOutput === 'true' ? '#22c55e' : conn.fromOutput === 'false' ? '#ef4444' : '#6366f1'}
+            strokeWidth={conn.isTemp ? '1' : '2'}
+            strokeDasharray={conn.isTemp ? '5,5' : 'none'}
+            fill="none"
+            className={`transition-all ${
+              conn.isTemp ? 'opacity-60' : 'hover:stroke-opacity-80 cursor-pointer'
+            }`}
+            onClick={() => !conn.isTemp && removeConnection(conn.id)}
+          />
+          {/* Punto medio para eliminar conexión */}
+          {!conn.isTemp && (
+            <circle
+              cx={(x1 + x2) / 2}
+              cy={(y1 + y2) / 2}
+              r="6"
+              fill="#ef4444"
+              className="opacity-0 hover:opacity-100 cursor-pointer transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeConnection(conn.id);
+              }}
+            >
+              <title>Click to remove connection</title>
+            </circle>
+          )}
+        </g>
       );
     });
   };
@@ -652,7 +846,7 @@ const FlowEditor = () => {
                       key={component.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, component)}
-                      className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-move hover:bg-blue-50 transition"
+                      className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-grab hover:bg-blue-50 hover:scale-105 transition-all duration-200 active:cursor-grabbing active:scale-95"
                     >
                       <span className="text-xl">{component.icon}</span>
                       <span className="text-sm">{t(component.nameKey)}</span>
@@ -694,6 +888,16 @@ const FlowEditor = () => {
             >
               <ZoomOut className="w-5 h-5" />
             </button>
+            <button
+              onClick={() => {
+                setScale(1);
+                setOffset({ x: 0, y: 0 });
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              title="Reset View"
+            >
+              Reset
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -715,15 +919,23 @@ const FlowEditor = () => {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          className="flex-1 relative overflow-hidden bg-gray-50"
+          className="flex-1 relative overflow-hidden bg-gray-50 cursor-grab"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
+          onMouseDown={handleCanvasMouseDown}
+          onClick={cancelConnection}
           style={{
             backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
             backgroundSize: `${20 * scale}px ${20 * scale}px`,
-            backgroundPosition: `${offset.x}px ${offset.y}px`
+            backgroundPosition: `${offset.x}px ${offset.y}px`,
+            cursor: isDraggingCanvas ? 'grabbing' : 'grab'
           }}
         >
+          {/* Fondo del canvas para detectar clics */}
+          <div 
+            className="canvas-background absolute inset-0 w-full h-full"
+            style={{ pointerEvents: 'auto' }}
+          />
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             style={{
@@ -745,8 +957,12 @@ const FlowEditor = () => {
             {nodes.map(node => (
               <div
                 key={node.id}
-                className={`absolute bg-white rounded-lg shadow-lg p-4 cursor-move transition-all hover:shadow-xl ${
+                className={`absolute bg-white rounded-lg shadow-lg p-4 transition-all hover:shadow-xl ${
                   selectedNode?.id === node.id ? 'ring-2 ring-blue-500' : ''
+                } ${
+                  isDragging && draggedNode?.id === node.id 
+                    ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 z-50' 
+                    : 'cursor-grab hover:shadow-xl'
                 }`}
                 style={{
                   left: node.position.x,
@@ -757,11 +973,7 @@ const FlowEditor = () => {
                   setSelectedNode(node);
                   setShowProperties(true);
                 }}
-                onMouseDown={(e) => {
-                  if ((e.target as any).classList?.contains('connection-point')) return;
-                  setDraggedNode(node);
-                  setIsDragging(true);
-                }}
+                onMouseDown={(e) => handleNodeMouseDown(e, node)}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-2xl">{node.icon}</span>
@@ -770,14 +982,18 @@ const FlowEditor = () => {
                 
                 {/* Connection points */}
                 <div
-                  className="connection-point absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition"
+                  className={`connection-point absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                    connectingFrom ? 'animate-pulse ring-2 ring-blue-300' : ''
+                  }`}
                   onClick={(e) => {
                     e.stopPropagation();
                     completeConnection(node.id);
                   }}
                 />
                 <div
-                  className="connection-point absolute -right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition"
+                  className={`connection-point absolute -right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                    connectingFrom?.nodeId === node.id ? 'ring-2 ring-blue-400 bg-blue-600' : ''
+                  }`}
                   onClick={(e) => {
                     e.stopPropagation();
                     startConnection(node.id);
@@ -824,7 +1040,7 @@ const FlowEditor = () => {
 const App = () => {
   const { t } = useTranslation();
   const [currentView, setCurrentView] = useState('dashboard');
-  const [flows, setFlows] = useState([
+  const [flows] = useState([
     { id: 1, name: 'Invoice Processing', status: 'active', lastRun: '2', runs: 45 },
     { id: 2, name: 'Data Migration', status: 'inactive', lastRun: '1', runs: 12 },
     { id: 3, name: 'Report Generation', status: 'active', lastRun: '30', runs: 128 }
