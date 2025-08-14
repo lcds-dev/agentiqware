@@ -6,6 +6,7 @@ import os
 import asyncio
 from typing import Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,11 +29,11 @@ from middleware.logging import logging_middleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print("🚀 Starting Agentiqware Backend...")
+    print("Starting Agentiqware Backend...")
     # Initialize services
     yield
     # Shutdown
-    print("👋 Shutting down Agentiqware Backend...")
+    print("Shutting down Agentiqware Backend...")
 
 # Create FastAPI app
 app = FastAPI(
@@ -43,18 +44,20 @@ app = FastAPI(
 )
 
 # CORS configuration
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://agentiqware.com").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_origins=[origin.strip() for origin in allowed_origins],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Security middleware
+allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,agentiqware.com,*.agentiqware.com").split(",")
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=os.getenv("ALLOWED_HOSTS", "*").split(",")
+    allowed_hosts=[host.strip() for host in allowed_hosts]
 )
 
 # Custom middleware
@@ -96,12 +99,18 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
+    # Log the error for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    
     return JSONResponse(
         status_code=500,
         content={
             "status": "error",
             "message": "Internal server error",
-            "detail": str(exc) if os.getenv("DEBUG") == "True" else None
+            "detail": str(exc) if os.getenv("DEBUG", "False").lower() == "true" else None,
+            "timestamp": datetime.utcnow().isoformat()
         }
     )
 

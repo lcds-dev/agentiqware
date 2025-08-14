@@ -86,7 +86,8 @@ resource "google_firestore_index" "executions_flow_status" {
 resource "google_storage_bucket" "user_files" {
   name          = "${var.project_id}-user-files"
   location      = var.region
-  force_destroy = false
+  # force_destroy = false
+  force_destroy = true
   
   uniform_bucket_level_access = true
   
