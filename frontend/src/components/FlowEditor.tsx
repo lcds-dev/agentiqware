@@ -111,6 +111,13 @@ const translations = {
     dataMigrationStarted: 'Data migration started',
     reportGenerationFailed: 'Report generation failed',
     
+    // Multi-selection
+    selectedNodes: 'Selected Nodes',
+    deleteAll: 'Delete All',
+    duplicateAll: 'Duplicate All',
+    selectAll: 'Select All',
+    clearSelection: 'Clear Selection',
+    
     // Platform Description
     platformSubtitle: 'RPA & Digital Agents Platform'
   },
@@ -220,6 +227,13 @@ const translations = {
     dataMigrationStarted: 'Migración de datos iniciada',
     reportGenerationFailed: 'Generación de reporte falló',
     
+    // Multi-selection
+    selectedNodes: 'Nodos Seleccionados',
+    deleteAll: 'Eliminar Todos',
+    duplicateAll: 'Duplicar Todos',
+    selectAll: 'Seleccionar Todo',
+    clearSelection: 'Limpiar Selección',
+    
     // Platform Description
     platformSubtitle: 'Plataforma de RPA y Agentes Digitales'
   }
@@ -316,10 +330,15 @@ const FlowEditor = () => {
   const [nodes, setNodes] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
+  const [selectionStart, setSelectionStart] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [draggedNode, setDraggedNode] = useState<any>(null);
+  const [draggedNodes, setDraggedNodes] = useState<any[]>([]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
@@ -413,6 +432,79 @@ const FlowEditor = () => {
     return newNode;
   };
 
+  // Funciones para manejo de selección múltiple
+  const selectNode = (nodeId: string, isCtrlPressed: boolean = false) => {
+    if (isCtrlPressed) {
+      const newSelected = new Set(selectedNodes);
+      if (newSelected.has(nodeId)) {
+        newSelected.delete(nodeId);
+      } else {
+        newSelected.add(nodeId);
+      }
+      setSelectedNodes(newSelected);
+    } else {
+      setSelectedNodes(new Set([nodeId]));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedNodes(new Set());
+    setSelectedNode(null);
+  };
+
+  const selectNodesInBox = (box: {x: number, y: number, width: number, height: number}) => {
+    const selected = new Set<string>();
+    nodes.forEach(node => {
+      const nodeX = node.position.x;
+      const nodeY = node.position.y;
+      const nodeWidth = 120; // minWidth del nodo
+      const nodeHeight = 80; // altura estimada del nodo
+      
+      // Verificar si el nodo está dentro del área de selección
+      if (nodeX + nodeWidth > box.x && 
+          nodeX < box.x + box.width &&
+          nodeY + nodeHeight > box.y &&
+          nodeY < box.y + box.height) {
+        selected.add(node.id);
+      }
+    });
+    setSelectedNodes(selected);
+  };
+
+  const deleteSelectedNodes = () => {
+    if (selectedNodes.size > 0) {
+      // Eliminar nodos seleccionados
+      setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
+      
+      // Eliminar conexiones relacionadas
+      setConnections(prev => prev.filter(conn => 
+        !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
+      ));
+      
+      clearSelection();
+    }
+  };
+
+  const duplicateSelectedNodes = () => {
+    if (selectedNodes.size > 0) {
+      const nodesToDuplicate = nodes.filter(node => selectedNodes.has(node.id));
+      const newNodes = nodesToDuplicate.map(node => ({
+        ...node,
+        id: `node_${Date.now()}_${Math.random()}`,
+        position: {
+          x: node.position.x + 150,
+          y: node.position.y + 50
+        }
+      }));
+      
+      setNodes(prev => [...prev, ...newNodes]);
+      
+      // Seleccionar los nuevos nodos duplicados
+      const newNodeIds = new Set(newNodes.map(node => node.id));
+      setSelectedNodes(newNodeIds);
+    }
+  };
+
   // Manejar drag & drop desde sidebar
   const handleDragStart = (e: any, component: any) => {
     e.dataTransfer.setData('component', JSON.stringify(component));
@@ -423,8 +515,27 @@ const FlowEditor = () => {
     if ((e.target as any).classList?.contains('connection-point')) return;
     
     e.preventDefault();
+    
+    const isCtrlPressed = e.ctrlKey || e.metaKey;
+    
+    // Manejo de selección
+    if (isCtrlPressed) {
+      selectNode(node.id, true);
+    } else if (!selectedNodes.has(node.id)) {
+      selectNode(node.id, false);
+    }
+    
+    // Preparar arrastre
     setDraggedNode(node);
     setIsDragging(true);
+    
+    // Si hay múltiples nodos seleccionados y este nodo está seleccionado, arrastrar todos
+    if (selectedNodes.has(node.id) && selectedNodes.size > 1) {
+      const nodesToDrag = nodes.filter(n => selectedNodes.has(n.id));
+      setDraggedNodes(nodesToDrag);
+    } else {
+      setDraggedNodes([node]);
+    }
     
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -452,11 +563,45 @@ const FlowEditor = () => {
       const newX = (e.clientX - dragStart.x - offset.x) / scale;
       const newY = (e.clientY - dragStart.y - offset.y) / scale;
       
-      setNodes(prev => prev.map(node => 
-        node.id === draggedNode.id 
-          ? { ...node, position: { x: newX, y: newY } }
-          : node
-      ));
+      // Calcular el desplazamiento del nodo principal
+      const deltaX = newX - draggedNode.position.x;
+      const deltaY = newY - draggedNode.position.y;
+      
+      // Mover todos los nodos seleccionados
+      setNodes(prev => prev.map(node => {
+        if (draggedNodes.some(draggedNode => draggedNode.id === node.id)) {
+          return { 
+            ...node, 
+            position: { 
+              x: node.position.x + deltaX, 
+              y: node.position.y + deltaY 
+            } 
+          };
+        }
+        return node;
+      }));
+      
+      // Actualizar la posición del nodo arrastrado para la próxima iteración
+      setDraggedNode((prev: any) => ({
+        ...prev,
+        position: { x: newX, y: newY }
+      }));
+    } else if (isSelecting) {
+      // Manejar selección por arrastre
+      if (!rect) return;
+      
+      const currentX = (e.clientX - rect.left - offset.x) / scale;
+      const currentY = (e.clientY - rect.top - offset.y) / scale;
+      
+      const box = {
+        x: Math.min(selectionStart.x, currentX),
+        y: Math.min(selectionStart.y, currentY),
+        width: Math.abs(currentX - selectionStart.x),
+        height: Math.abs(currentY - selectionStart.y)
+      };
+      
+      setSelectionBox(box);
+      selectNodesInBox(box);
     } else if (isDraggingCanvas) {
       const deltaX = e.clientX - lastMousePos.x;
       const deltaY = e.clientY - lastMousePos.y;
@@ -474,13 +619,31 @@ const FlowEditor = () => {
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
     setDraggedNode(null);
+    setDraggedNodes([]);
     setIsDraggingCanvas(false);
+    setIsSelecting(false);
+    setSelectionBox(null);
   }, []);
 
   // Manejar drag del canvas
   const handleCanvasMouseDown = (e: any) => {
     if (e.target === canvasRef.current || e.target.closest('.canvas-background')) {
-      setIsDraggingCanvas(true);
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      
+      const isCtrlPressed = e.ctrlKey || e.metaKey;
+      
+      if (!isCtrlPressed) {
+        clearSelection();
+      }
+      
+      // Iniciar selección por arrastre
+      const startX = (e.clientX - rect.left - offset.x) / scale;
+      const startY = (e.clientY - rect.top - offset.y) / scale;
+      
+      setIsSelecting(true);
+      setSelectionStart({ x: startX, y: startY });
+      setIsDraggingCanvas(false);
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
   };
@@ -569,10 +732,28 @@ const FlowEditor = () => {
     setConnections(prev => prev.filter(conn => conn.id !== connectionId));
   };
 
+  // Manejar teclas
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      deleteSelectedNodes();
+    } else if (e.key === 'Escape') {
+      clearSelection();
+      setConnectingFrom(null);
+    } else if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'a') {
+        e.preventDefault();
+        // Seleccionar todos los nodos
+        const allNodeIds = new Set(nodes.map(node => node.id));
+        setSelectedNodes(allNodeIds);
+      }
+    }
+  }, [selectedNodes, nodes]);
+
   // Efectos para event listeners
   useEffect(() => {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('keydown', handleKeyDown);
     
     const currentCanvas = canvasRef.current;
     if (currentCanvas) {
@@ -582,12 +763,13 @@ const FlowEditor = () => {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('keydown', handleKeyDown);
       
       if (currentCanvas) {
         currentCanvas.removeEventListener('wheel', handleWheel);
       }
     };
-  }, [handleMouseMove, handleMouseUp, handleWheel]);
+  }, [handleMouseMove, handleMouseUp, handleWheel, handleKeyDown]);
 
   // Renderizar conexiones
   const renderConnections = () => {
@@ -700,6 +882,48 @@ const FlowEditor = () => {
     'y': 'Y',
     'button': 'button',
     'clicks': 'clicks'
+  };
+
+  // Panel de selección múltiple
+  const MultiSelectionPanel = () => {
+    if (selectedNodes.size <= 1) return null;
+
+    return (
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl border p-4 z-50 min-w-80">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span className="font-medium">{t('selectedNodes')}: {selectedNodes.size}</span>
+          </div>
+          <button
+            onClick={clearSelection}
+            className="p-1 hover:bg-gray-100 rounded"
+            title={t('clearSelection')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={duplicateSelectedNodes}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm"
+            title={t('duplicateAll')}
+          >
+            <Copy className="w-4 h-4" />
+            {t('duplicateAll')}
+          </button>
+          <button
+            onClick={deleteSelectedNodes}
+            className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
+            title={t('deleteAll')}
+          >
+            <Trash2 className="w-4 h-4" />
+            {t('deleteAll')}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   // Panel de propiedades dinámico con traducciones
@@ -898,6 +1122,24 @@ const FlowEditor = () => {
             >
               Reset
             </button>
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <button
+              onClick={() => {
+                const allNodeIds = new Set(nodes.map(node => node.id));
+                setSelectedNodes(allNodeIds);
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              title={t('selectAll')}
+            >
+              {t('selectAll')}
+            </button>
+            <button
+              onClick={clearSelection}
+              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              title={t('clearSelection')}
+            >
+              {t('clearSelection')}
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -958,9 +1200,11 @@ const FlowEditor = () => {
               <div
                 key={node.id}
                 className={`absolute bg-white rounded-lg shadow-lg p-4 transition-all hover:shadow-xl ${
-                  selectedNode?.id === node.id ? 'ring-2 ring-blue-500' : ''
+                  selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                 } ${
-                  isDragging && draggedNode?.id === node.id 
+                  selectedNode?.id === node.id ? 'ring-2 ring-purple-500' : ''
+                } ${
+                  isDragging && draggedNodes.some(dn => dn.id === node.id)
                     ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 z-50' 
                     : 'cursor-grab hover:shadow-xl'
                 }`}
@@ -1025,8 +1269,26 @@ const FlowEditor = () => {
             ))}
           </div>
 
+          {/* Cuadro de selección */}
+          {selectionBox && (
+            <div
+              className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-20 pointer-events-none"
+              style={{
+                left: selectionBox.x * scale + offset.x,
+                top: selectionBox.y * scale + offset.y,
+                width: selectionBox.width * scale,
+                height: selectionBox.height * scale,
+                transform: `scale(1)`,
+                transformOrigin: '0 0'
+              }}
+            />
+          )}
+
           {/* Panel de propiedades */}
           {showProperties && selectedNode && <PropertyPanel node={selectedNode} />}
+
+          {/* Panel de selección múltiple */}
+          <MultiSelectionPanel />
 
           {/* AI Prompt Dialog */}
           {showAIPrompt && <AIPromptDialog />}
