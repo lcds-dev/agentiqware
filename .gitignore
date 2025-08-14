@@ -53,3 +53,9 @@ credentials.json
 # Backups
 *.backup
 *.bak
+
+# Claude AI settings
+.claude/
+
+# Nested git repositories
+agentiqware/
