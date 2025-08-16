@@ -650,7 +650,14 @@ const FlowEditor = () => {
   }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, nodes, selectNodesInBox]);
 
   // Manejar fin del drag
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: MouseEvent) => {
+    // No interferir si el clic es en el panel de selección múltiple
+    const target = e.target as HTMLElement;
+    if (target?.closest('.multi-selection-panel')) {
+      console.log('MouseUp ignored - click in multi-selection panel');
+      return;
+    }
+    
     setIsDragging(false);
     setDraggedNode(null);
     setDraggedNodes([]);
@@ -978,7 +985,20 @@ const FlowEditor = () => {
     if (selectedNodes.size <= 1) return null;
 
     return (
-      <div className="multi-selection-panel fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg border p-4 z-50 min-w-80" style={{ pointerEvents: 'auto', boxShadow: '0 40px 80px -20px rgba(0, 0, 0, 0.4), 0 20px 25px -8px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)' }}>
+      <div 
+        className="multi-selection-panel fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg border p-4 z-50 min-w-80" 
+        style={{ 
+          pointerEvents: 'auto', 
+          boxShadow: '0 40px 80px -20px rgba(0, 0, 0, 0.4), 0 20px 25px -8px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+          position: 'fixed',
+          zIndex: 9999
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('MultiSelectionPanel clicked');
+        }}
+      >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -1114,27 +1134,58 @@ const FlowEditor = () => {
             {t('duplicateAll')}
           </button>
           <button
-            onClick={(e) => {
+            onMouseEnter={() => console.log('Delete button hovered')}
+            onMouseDown={(e) => {
+              console.log('Delete button mouse down');
               e.preventDefault();
               e.stopPropagation();
-              console.log('Delete button clicked! selectedNodes.size:', selectedNodes.size);
+            }}
+            onMouseUp={(e) => {
+              console.log('Delete button mouse up - executing delete');
+              e.preventDefault();
+              e.stopPropagation();
+              
+              console.log('Delete action triggered!', {
+                selectedNodesSize: selectedNodes.size,
+                selectedNodesArray: Array.from(selectedNodes),
+                nodesLength: nodes.length
+              });
+              
               if (selectedNodes.size > 0) {
-                console.log('Deleting nodes:', Array.from(selectedNodes));
+                const nodesToDelete = Array.from(selectedNodes);
+                console.log('Deleting nodes:', nodesToDelete);
+                
                 // Eliminar nodos seleccionados
-                setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
+                setNodes(prev => {
+                  const filtered = prev.filter(node => !selectedNodes.has(node.id));
+                  console.log('Nodes after deletion:', filtered.length, 'from', prev.length);
+                  return filtered;
+                });
                 
                 // Eliminar conexiones relacionadas
-                setConnections(prev => prev.filter(conn => 
-                  !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
-                ));
+                setConnections(prev => {
+                  const filtered = prev.filter(conn => 
+                    !selectedNodes.has(conn.from) && !selectedNodes.has(conn.to)
+                  );
+                  console.log('Connections after deletion:', filtered.length, 'from', prev.length);
+                  return filtered;
+                });
                 
+                // Limpiar selección
+                console.log('Clearing selection...');
                 clearSelection();
               } else {
                 console.log('No nodes selected to delete');
               }
             }}
+            onClick={(e) => {
+              console.log('Delete button clicked! EVENT FIRED');
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
             title={t('deleteAll')}
+            style={{ pointerEvents: 'auto', zIndex: 10000 }}
           >
             <Trash2 className="w-4 h-4" />
             {t('deleteAll')}

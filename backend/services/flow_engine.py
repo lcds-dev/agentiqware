@@ -42,7 +42,7 @@ from google.cloud import tasks_v2
 from google.cloud import logging as cloud_logging
 
 # Initialize clients
-db = firestore.Client()
+db = firestore.Client(database="firestore-native")
 storage_client = storage.Client()
 publisher = pubsub_v1.PublisherClient()
 tasks_client = tasks_v2.CloudTasksClient()
