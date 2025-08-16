@@ -357,6 +357,9 @@ const FlowEditor = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPrompt, setShowAIPrompt] = useState(false);
   const [aiPrompt, setAIPrompt] = useState('');
+  const [connectionOrientation, setConnectionOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [showInsertMenu, setShowInsertMenu] = useState<{connectionId: string, x: number, y: number, canvasX?: number, canvasY?: number} | null>(null);
+  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
 
   // Componentes disponibles con traducciones
   const availableComponents = [
@@ -647,7 +650,7 @@ const FlowEditor = () => {
       
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
-  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, nodes, selectNodesInBox]);
+  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, selectNodesInBox]);
 
   // Manejar fin del drag
   const handleMouseUp = useCallback((e: MouseEvent) => {
@@ -794,6 +797,9 @@ const FlowEditor = () => {
     const isMultiSelectionPanel = e.target.closest('.multi-selection-panel');
     
     if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel) {
+      // Cerrar menú de inserción si está abierto
+      setShowInsertMenu(null);
+      
       // Solo deseleccionar en un clic simple (no después de arrastrar)
       setTimeout(() => {
         if (selectedNodes.size > 0) {
@@ -807,6 +813,44 @@ const FlowEditor = () => {
   // Eliminar conexión
   const removeConnection = (connectionId: string) => {
     setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+  };
+
+  // Insertar nodo en conexión
+  const insertNodeInConnection = (connectionId: string, component: any, insertPosition: {x: number, y: number}) => {
+    console.log('insertNodeInConnection called:', { connectionId, component: component.nameKey, insertPosition });
+    const connection = connections.find(conn => conn.id === connectionId);
+    if (!connection) {
+      console.log('Connection not found:', connectionId);
+      return;
+    }
+
+    console.log('Found connection:', connection);
+    // Crear el nuevo nodo
+    const newNode = addNode(component, insertPosition);
+    console.log('Created new node:', newNode);
+
+    // Eliminar la conexión original
+    setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+
+    // Crear dos nuevas conexiones
+    const conn1 = {
+      id: `conn_${Date.now()}_1`,
+      from: connection.from,
+      fromOutput: connection.fromOutput,
+      to: newNode.id,
+      toInput: 'default'
+    };
+
+    const conn2 = {
+      id: `conn_${Date.now()}_2`,
+      from: newNode.id,
+      fromOutput: 'default',
+      to: connection.to,
+      toInput: connection.toInput
+    };
+
+    setConnections(prev => [...prev, conn1, conn2]);
+    setShowInsertMenu(null);
   };
 
   // Manejar teclas
@@ -887,43 +931,79 @@ const FlowEditor = () => {
       }
     }
     
+    console.log('Rendering connections:', allConnections.length, 'hoveredConnection:', hoveredConnection);
+    
     return allConnections.map(conn => {
       const fromNode = nodes.find(n => n.id === conn.from);
       if (!fromNode) return null;
       
       let x1, y1, x2, y2;
       
-      // Calcular punto de salida
-      if (conn.fromOutput === 'true') {
-        x1 = fromNode.position.x + 40;
-        y1 = fromNode.position.y + 80;
-      } else if (conn.fromOutput === 'false') {
-        x1 = fromNode.position.x + 80;
-        y1 = fromNode.position.y + 80;
+      // Calcular punto de salida basado en orientación
+      if (connectionOrientation === 'horizontal') {
+        // Horizontal: salida por la derecha
+        if (conn.fromOutput === 'true') {
+          x1 = fromNode.position.x + 40;
+          y1 = fromNode.position.y + 80;
+        } else if (conn.fromOutput === 'false') {
+          x1 = fromNode.position.x + 80;
+          y1 = fromNode.position.y + 80;
+        } else {
+          x1 = fromNode.position.x + 120;
+          y1 = fromNode.position.y + 40;
+        }
       } else {
-        x1 = fromNode.position.x + 120;
-        y1 = fromNode.position.y + 40;
+        // Vertical: salida por abajo
+        if (conn.fromOutput === 'true') {
+          x1 = fromNode.position.x + 40;
+          y1 = fromNode.position.y + 80;
+        } else if (conn.fromOutput === 'false') {
+          x1 = fromNode.position.x + 80;
+          y1 = fromNode.position.y + 80;
+        } else {
+          x1 = fromNode.position.x + 60;
+          y1 = fromNode.position.y + 80;
+        }
       }
       
-      // Calcular punto de llegada
+      // Calcular punto de llegada basado en orientación
       if (conn.to === 'mouse') {
         x2 = mousePosition.x;
         y2 = mousePosition.y;
       } else {
         const toNode = nodes.find(n => n.id === conn.to);
         if (!toNode) return null;
-        x2 = toNode.position.x;
-        y2 = toNode.position.y + 40;
+        if (connectionOrientation === 'horizontal') {
+          // Horizontal: entrada por la izquierda
+          x2 = toNode.position.x;
+          y2 = toNode.position.y + 40;
+        } else {
+          // Vertical: entrada por arriba
+          x2 = toNode.position.x + 60;
+          y2 = toNode.position.y;
+        }
       }
 
-      const dx = x2 - x1;
-      const cp1x = x1 + dx * 0.5;
-      const cp1y = y1;
-      const cp2x = x2 - dx * 0.5;
-      const cp2y = y2;
+      let cp1x, cp1y, cp2x, cp2y;
+      
+      if (connectionOrientation === 'horizontal') {
+        const dx = x2 - x1;
+        cp1x = x1 + dx * 0.5;
+        cp1y = y1;
+        cp2x = x2 - dx * 0.5;
+        cp2y = y2;
+      } else {
+        // Vertical orientation
+        const dy = y2 - y1;
+        cp1x = x1;
+        cp1y = y1 + dy * 0.5;
+        cp2x = x2;
+        cp2y = y2 - dy * 0.5;
+      }
 
       return (
         <g key={conn.id}>
+          {/* Línea de conexión visible */}
           <path
             d={`M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`}
             stroke={conn.isTemp ? '#94a3b8' : conn.fromOutput === 'true' ? '#22c55e' : conn.fromOutput === 'false' ? '#ef4444' : '#6366f1'}
@@ -933,24 +1013,26 @@ const FlowEditor = () => {
             className={`transition-all ${
               conn.isTemp ? 'opacity-60' : 'hover:stroke-opacity-80 cursor-pointer'
             }`}
-            onClick={() => !conn.isTemp && removeConnection(conn.id)}
-          />
-          {/* Punto medio para eliminar conexión */}
-          {!conn.isTemp && (
-            <circle
-              cx={(x1 + x2) / 2}
-              cy={(y1 + y2) / 2}
-              r="6"
-              fill="#ef4444"
-              className="opacity-0 hover:opacity-100 cursor-pointer transition-opacity"
-              onClick={(e) => {
-                e.stopPropagation();
+            onClick={(e) => {
+              e.stopPropagation();
+              if (conn.isTemp) return;
+              
+              // Si es doble clic, mostrar menú de inserción
+              if (e.detail === 2) {
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (rect) {
+                  const x = (e.clientX - rect.left - offset.x) / scale;
+                  const y = (e.clientY - rect.top - offset.y) / scale;
+                  setShowInsertMenu({ connectionId: conn.id, x, y });
+                }
+              } else {
+                // Un solo clic elimina la conexión
                 removeConnection(conn.id);
-              }}
-            >
-              <title>Click to remove connection</title>
-            </circle>
-          )}
+              }
+            }}
+          />
+          
+          
         </g>
       );
     });
@@ -1271,6 +1353,55 @@ const FlowEditor = () => {
     );
   };
 
+  // Insert Node Menu
+  const InsertNodeMenu = () => {
+    if (!showInsertMenu) return null;
+
+    return (
+      <div 
+        className="fixed bg-white rounded-lg shadow-xl border p-2 z-50 max-h-60 overflow-y-auto"
+        style={{
+          left: showInsertMenu.x,
+          top: showInsertMenu.y,
+          transform: 'translate(-50%, -50%)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-xs font-medium text-gray-500 mb-2 px-2">Insert Node</div>
+        <div className="space-y-1">
+          {availableComponents.map(component => (
+            <button
+              key={component.id}
+              onMouseDown={(e) => {
+                console.log('Menu button mousedown:', component.nameKey);
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('Inserting component:', component.nameKey, 'for connection:', showInsertMenu?.connectionId);
+                if (!showInsertMenu) {
+                  console.log('No showInsertMenu state!');
+                  return;
+                }
+                const insertX = showInsertMenu.canvasX ?? showInsertMenu.x;
+                const insertY = showInsertMenu.canvasY ?? showInsertMenu.y;
+                insertNodeInConnection(
+                  showInsertMenu.connectionId, 
+                  component, 
+                  { x: insertX - 60, y: insertY - 40 }
+                );
+              }}
+              className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 rounded text-left text-sm cursor-pointer"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <span className="text-lg">{component.icon}</span>
+              <span>{t(component.nameKey)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // AI Prompt Dialog con traducciones
   const AIPromptDialog = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1409,6 +1540,15 @@ const FlowEditor = () => {
             >
               {t('clearSelection')}
             </button>
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <button
+              onClick={() => setConnectionOrientation(connectionOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
+              className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              title={`Connection orientation: ${connectionOrientation}`}
+            >
+              {connectionOrientation === 'horizontal' ? '↔' : '↕'}
+              {connectionOrientation === 'horizontal' ? 'Horizontal' : 'Vertical'}
+            </button>
             {clipboard && clipboard.nodes.length > 0 && (
               <>
                 <div className="w-px h-6 bg-gray-300 mx-2" />
@@ -1449,7 +1589,10 @@ const FlowEditor = () => {
           onMouseDown={handleCanvasMouseDown}
           onClick={handleCanvasClick}
           style={{
-            backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+            backgroundImage: `
+              linear-gradient(to right, #d1d5db 1px, transparent 1px),
+              linear-gradient(to bottom, #d1d5db 1px, transparent 1px)
+            `,
             backgroundSize: `${20 * scale}px ${20 * scale}px`,
             backgroundPosition: `${offset.x}px ${offset.y}px`,
             cursor: isDraggingCanvas ? 'grabbing' : 'grab'
@@ -1461,10 +1604,11 @@ const FlowEditor = () => {
             style={{ pointerEvents: 'auto' }}
           />
           <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
+            className="absolute inset-0 w-full h-full"
             style={{
               transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
-              transformOrigin: '0 0'
+              transformOrigin: '0 0',
+              pointerEvents: 'none'
             }}
           >
             {renderConnections()}
@@ -1510,45 +1654,95 @@ const FlowEditor = () => {
                   <span className="text-sm font-medium">{node.name}</span>
                 </div>
                 
-                {/* Connection points */}
-                <div
-                  className={`connection-point absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
-                    connectingFrom ? 'animate-pulse ring-2 ring-blue-300' : ''
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    completeConnection(node.id);
-                  }}
-                />
-                <div
-                  className={`connection-point absolute -right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
-                    connectingFrom?.nodeId === node.id ? 'ring-2 ring-blue-400 bg-blue-600' : ''
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startConnection(node.id);
-                  }}
-                />
+                {/* Connection points - adaptan según orientación */}
+                {connectionOrientation === 'horizontal' ? (
+                  <>
+                    {/* Horizontal: entrada izquierda, salida derecha */}
+                    <div
+                      className={`connection-point absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                        connectingFrom ? 'animate-pulse ring-2 ring-blue-300' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        completeConnection(node.id);
+                      }}
+                    />
+                    <div
+                      className={`connection-point absolute -right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                        connectingFrom?.nodeId === node.id ? 'ring-2 ring-blue-400 bg-blue-600' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startConnection(node.id);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* Vertical: entrada arriba, salida abajo */}
+                    <div
+                      className={`connection-point absolute left-1/2 -top-2 transform -translate-x-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                        connectingFrom ? 'animate-pulse ring-2 ring-blue-300' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        completeConnection(node.id);
+                      }}
+                    />
+                    <div
+                      className={`connection-point absolute left-1/2 -bottom-2 transform -translate-x-1/2 w-4 h-4 bg-blue-500 rounded-full cursor-pointer hover:scale-125 transition-all duration-200 ${
+                        connectingFrom?.nodeId === node.id ? 'ring-2 ring-blue-400 bg-blue-600' : ''
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startConnection(node.id);
+                      }}
+                    />
+                  </>
+                )}
                 
-                {/* Conditional outputs for IF nodes */}
+                {/* Conditional outputs for IF nodes - adaptan según orientación */}
                 {node.type === 'condition' && (
                   <>
-                    <div
-                      className="connection-point absolute -bottom-2 left-1/3 w-4 h-4 bg-green-500 rounded-full cursor-pointer hover:scale-125 transition"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startConnection(node.id, 'true');
-                      }}
-                      title="True"
-                    />
-                    <div
-                      className="connection-point absolute -bottom-2 right-1/3 w-4 h-4 bg-red-500 rounded-full cursor-pointer hover:scale-125 transition"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startConnection(node.id, 'false');
-                      }}
-                      title="False"
-                    />
+                    {connectionOrientation === 'horizontal' ? (
+                      <>
+                        <div
+                          className="connection-point absolute -bottom-2 left-1/3 w-4 h-4 bg-green-500 rounded-full cursor-pointer hover:scale-125 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startConnection(node.id, 'true');
+                          }}
+                          title="True"
+                        />
+                        <div
+                          className="connection-point absolute -bottom-2 right-1/3 w-4 h-4 bg-red-500 rounded-full cursor-pointer hover:scale-125 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startConnection(node.id, 'false');
+                          }}
+                          title="False"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div
+                          className="connection-point absolute -bottom-2 left-1/3 w-4 h-4 bg-green-500 rounded-full cursor-pointer hover:scale-125 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startConnection(node.id, 'true');
+                          }}
+                          title="True"
+                        />
+                        <div
+                          className="connection-point absolute -bottom-2 right-1/3 w-4 h-4 bg-red-500 rounded-full cursor-pointer hover:scale-125 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startConnection(node.id, 'false');
+                          }}
+                          title="False"
+                        />
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -1573,8 +1767,83 @@ const FlowEditor = () => {
           {/* Panel de propiedades */}
           {showProperties && selectedNode && <PropertyPanel node={selectedNode} />}
 
+          {/* Botones + como elementos HTML absolutos */}
+          {connections.map(conn => {
+            const fromNode = nodes.find(n => n.id === conn.from);
+            const toNode = nodes.find(n => n.id === conn.to);
+            if (!fromNode || !toNode) return null;
+            
+            // Calcular posiciones de conexión exactas (igual que en SVG)
+            let x1, y1, x2, y2;
+            
+            if (connectionOrientation === 'horizontal') {
+              // Horizontal: salida por la derecha, entrada por la izquierda
+              if (conn.fromOutput === 'true') {
+                x1 = fromNode.position.x + 40;
+                y1 = fromNode.position.y + 80;
+              } else if (conn.fromOutput === 'false') {
+                x1 = fromNode.position.x + 80;
+                y1 = fromNode.position.y + 80;
+              } else {
+                x1 = fromNode.position.x + 120;
+                y1 = fromNode.position.y + 40;
+              }
+              x2 = toNode.position.x;
+              y2 = toNode.position.y + 40;
+            } else {
+              // Vertical: salida por abajo, entrada por arriba
+              if (conn.fromOutput === 'true') {
+                x1 = fromNode.position.x + 40;
+                y1 = fromNode.position.y + 80;
+              } else if (conn.fromOutput === 'false') {
+                x1 = fromNode.position.x + 80;
+                y1 = fromNode.position.y + 80;
+              } else {
+                x1 = fromNode.position.x + 60;
+                y1 = fromNode.position.y + 80;
+              }
+              x2 = toNode.position.x + 60;
+              y2 = toNode.position.y;
+            }
+            
+            // Calcular punto medio de la curva Bézier
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+            
+            return (
+              <button
+                key={`btn-${conn.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('Opening insert menu for connection:', conn.id);
+                  // Coordenadas en pantalla para el menú
+                  const screenX = midX * scale + offset.x;
+                  const screenY = midY * scale + offset.y;
+                  setShowInsertMenu({ 
+                    connectionId: conn.id, 
+                    x: screenX,
+                    y: screenY,
+                    canvasX: midX,
+                    canvasY: midY
+                  });
+                }}
+                className="absolute w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold cursor-pointer transition-all duration-200 hover:scale-110 shadow-lg hover:shadow-xl z-20 opacity-30 hover:opacity-100"
+                style={{
+                  left: midX * scale + offset.x - 12,
+                  top: midY * scale + offset.y - 12,
+                }}
+                title="Click to insert node"
+              >
+                +
+              </button>
+            );
+          })}
+
           {/* Panel de selección múltiple */}
           <MultiSelectionPanel />
+
+          {/* Insert Node Menu */}
+          <InsertNodeMenu />
 
           {/* AI Prompt Dialog */}
           {showAIPrompt && <AIPromptDialog />}
