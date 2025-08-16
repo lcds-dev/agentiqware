@@ -359,7 +359,6 @@ const FlowEditor = () => {
   const [aiPrompt, setAIPrompt] = useState('');
   const [connectionOrientation, setConnectionOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [showInsertMenu, setShowInsertMenu] = useState<{connectionId: string, x: number, y: number, canvasX?: number, canvasY?: number} | null>(null);
-  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
 
   // Componentes disponibles con traducciones
   const availableComponents = [
@@ -931,7 +930,7 @@ const FlowEditor = () => {
       }
     }
     
-    console.log('Rendering connections:', allConnections.length, 'hoveredConnection:', hoveredConnection);
+    console.log('Rendering connections:', allConnections.length);
     
     return allConnections.map(conn => {
       const fromNode = nodes.find(n => n.id === conn.from);
@@ -1031,8 +1030,6 @@ const FlowEditor = () => {
               }
             }}
           />
-          
-          
         </g>
       );
     });
@@ -1847,10 +1844,10 @@ const FlowEditor = () => {
 
           {/* AI Prompt Dialog */}
           {showAIPrompt && <AIPromptDialog />}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 // Componente principal de la aplicación con i18n
