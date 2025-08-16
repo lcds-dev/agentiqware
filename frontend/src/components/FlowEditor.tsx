@@ -480,25 +480,6 @@ const FlowEditor = () => {
   };
 
 
-  const duplicateSelectedNodes = useCallback(() => {
-    if (selectedNodes.size > 0) {
-      const nodesToDuplicate = nodes.filter(node => selectedNodes.has(node.id));
-      const newNodes = nodesToDuplicate.map(node => ({
-        ...node,
-        id: `node_${Date.now()}_${Math.random()}`,
-        position: {
-          x: node.position.x + 150,
-          y: node.position.y + 50
-        }
-      }));
-      
-      setNodes(prev => [...prev, ...newNodes]);
-      
-      // Seleccionar los nuevos nodos duplicados
-      const newNodeIds = new Set(newNodes.map(node => node.id));
-      setSelectedNodes(newNodeIds);
-    }
-  }, [selectedNodes, nodes]);
 
   // Funciones de clipboard
   const copySelectedNodes = useCallback(() => {
@@ -657,6 +638,8 @@ const FlowEditor = () => {
       const deltaX = e.clientX - lastMousePos.x;
       const deltaY = e.clientY - lastMousePos.y;
       
+      console.log('Moving canvas:', { deltaX, deltaY, isDraggingCanvas });
+      
       setOffset(prev => ({
         x: prev.x + deltaX,
         y: prev.y + deltaY
@@ -664,7 +647,7 @@ const FlowEditor = () => {
       
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
-  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos]);
+  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, nodes, selectNodesInBox]);
 
   // Manejar fin del drag
   const handleMouseUp = useCallback(() => {
@@ -678,25 +661,42 @@ const FlowEditor = () => {
 
   // Manejar drag del canvas
   const handleCanvasMouseDown = (e: any) => {
-    if (e.target === canvasRef.current || e.target.closest('.canvas-background')) {
+    // Verificar si el clic es en el canvas (no en un nodo u otro elemento)
+    const isNodeClick = e.target.closest('[data-node-id]');
+    const isConnectionPoint = e.target.classList?.contains('connection-point');
+    const isMultiSelectionPanel = e.target.closest('.multi-selection-panel');
+    
+    // Solo proceder si el clic es en el canvas (fondo) y no en otros elementos
+    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       
       const isCtrlPressed = e.ctrlKey || e.metaKey;
+      const isShiftPressed = e.shiftKey;
       
-      
-      // Solo iniciar selección por arrastre si no se presiona Ctrl
-      if (!isCtrlPressed) {
-        // Iniciar selección por arrastre
+      if (isShiftPressed) {
+        // Prevenir comportamiento por defecto y propagación
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Iniciar arrastre del canvas con Shift
+        setIsDraggingCanvas(true);
+        setLastMousePos({ x: e.clientX, y: e.clientY });
+        
+        // Limpiar otros estados
+        setIsSelecting(false);
+        setIsDragging(false);
+        
+        console.log('Canvas dragging started with Shift');
+      } else if (!isCtrlPressed) {
+        // Solo iniciar selección por arrastre si no se presiona Ctrl ni Shift
         const startX = (e.clientX - rect.left - offset.x) / scale;
         const startY = (e.clientY - rect.top - offset.y) / scale;
         
         setIsSelecting(true);
         setSelectionStart({ x: startX, y: startY });
+        setIsDraggingCanvas(false);
       }
-      
-      setIsDraggingCanvas(false);
-      setLastMousePos({ x: e.clientX, y: e.clientY });
     }
   };
 
@@ -781,11 +781,12 @@ const FlowEditor = () => {
 
   // Manejar clic en canvas (para deseleccionar y cancelar conexiones)
   const handleCanvasClick = (e: any) => {
-    // Verificar si el clic NO fue en un nodo o connection point
+    // Verificar si el clic NO fue en un nodo, connection point, o en el MultiSelectionPanel
     const isNodeClick = e.target.closest('[data-node-id]');
     const isConnectionPoint = e.target.classList?.contains('connection-point');
+    const isMultiSelectionPanel = e.target.closest('.multi-selection-panel');
     
-    if (!isNodeClick && !isConnectionPoint) {
+    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel) {
       // Solo deseleccionar en un clic simple (no después de arrastrar)
       setTimeout(() => {
         if (selectedNodes.size > 0) {
@@ -977,7 +978,7 @@ const FlowEditor = () => {
     if (selectedNodes.size <= 1) return null;
 
     return (
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl border p-4 z-50 min-w-80">
+      <div className="multi-selection-panel fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg border p-4 z-50 min-w-80" style={{ pointerEvents: 'auto', boxShadow: '0 40px 80px -20px rgba(0, 0, 0, 0.4), 0 20px 25px -8px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -994,7 +995,19 @@ const FlowEditor = () => {
         
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={copySelectedNodes}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Copy button clicked! selectedNodes.size:', selectedNodes.size);
+              if (selectedNodes.size > 0) {
+                const nodesToCopy = nodes.filter(node => selectedNodes.has(node.id));
+                console.log('Copying nodes:', nodesToCopy);
+                setClipboard({ nodes: nodesToCopy, operation: 'copy' });
+                setCutNodes(new Set());
+              } else {
+                console.log('No nodes selected to copy');
+              }
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition text-sm"
             title={t('copyNodes')}
           >
@@ -1002,7 +1015,19 @@ const FlowEditor = () => {
             {t('copyNodes')}
           </button>
           <button
-            onClick={cutSelectedNodes}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Cut button clicked! selectedNodes.size:', selectedNodes.size);
+              if (selectedNodes.size > 0) {
+                const nodesToCut = nodes.filter(node => selectedNodes.has(node.id));
+                console.log('Cutting nodes:', nodesToCut);
+                setClipboard({ nodes: nodesToCut, operation: 'cut' });
+                setCutNodes(new Set(selectedNodes));
+              } else {
+                console.log('No nodes selected to cut');
+              }
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition text-sm"
             title={t('cutNodes')}
           >
@@ -1010,7 +1035,45 @@ const FlowEditor = () => {
             {t('cutNodes')}
           </button>
           <button
-            onClick={pasteNodes}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Paste button clicked! clipboard:', clipboard);
+              if (clipboard && clipboard.nodes.length > 0) {
+                console.log('Pasting nodes:', clipboard.nodes);
+                // Generar nuevos IDs para los nodos pegados
+                const pastedNodes = clipboard.nodes.map(node => ({
+                  ...node,
+                  id: `node_${Date.now()}_${Math.random()}`,
+                  position: {
+                    x: node.position.x + 50,
+                    y: node.position.y + 50
+                  }
+                }));
+
+                // Si era cortar, eliminar los nodos originales
+                if (clipboard.operation === 'cut') {
+                  const cutNodeIds = new Set(clipboard.nodes.map(n => n.id));
+                  setNodes(prev => prev.filter(node => !cutNodeIds.has(node.id)));
+                  
+                  setConnections(prev => prev.filter(conn => 
+                    !cutNodeIds.has(conn.from) && !cutNodeIds.has(conn.to)
+                  ));
+                  
+                  setCutNodes(new Set());
+                  setClipboard(null);
+                }
+
+                // Agregar los nodos pegados
+                setNodes(prev => [...prev, ...pastedNodes]);
+                
+                // Seleccionar los nodos pegados
+                const pastedNodeIds = new Set(pastedNodes.map(node => node.id));
+                setSelectedNodes(pastedNodeIds);
+              } else {
+                console.log('No clipboard content to paste');
+              }
+            }}
             disabled={!clipboard || clipboard.nodes.length === 0}
             className="flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title={t('pasteNodes')}
@@ -1019,7 +1082,31 @@ const FlowEditor = () => {
             {t('pasteNodes')}
           </button>
           <button
-            onClick={duplicateSelectedNodes}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Duplicate button clicked! selectedNodes.size:', selectedNodes.size);
+              if (selectedNodes.size > 0) {
+                const nodesToDuplicate = nodes.filter(node => selectedNodes.has(node.id));
+                console.log('Duplicating nodes:', nodesToDuplicate);
+                const newNodes = nodesToDuplicate.map(node => ({
+                  ...node,
+                  id: `node_${Date.now()}_${Math.random()}`,
+                  position: {
+                    x: node.position.x + 150,
+                    y: node.position.y + 50
+                  }
+                }));
+                
+                setNodes(prev => [...prev, ...newNodes]);
+                
+                // Seleccionar los nuevos nodos duplicados
+                const newNodeIds = new Set(newNodes.map(node => node.id));
+                setSelectedNodes(newNodeIds);
+              } else {
+                console.log('No nodes selected to duplicate');
+              }
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm"
             title={t('duplicateAll')}
           >
@@ -1027,8 +1114,12 @@ const FlowEditor = () => {
             {t('duplicateAll')}
           </button>
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Delete button clicked! selectedNodes.size:', selectedNodes.size);
               if (selectedNodes.size > 0) {
+                console.log('Deleting nodes:', Array.from(selectedNodes));
                 // Eliminar nodos seleccionados
                 setNodes(prev => prev.filter(node => !selectedNodes.has(node.id)));
                 
@@ -1038,6 +1129,8 @@ const FlowEditor = () => {
                 ));
                 
                 clearSelection();
+              } else {
+                console.log('No nodes selected to delete');
               }
             }}
             className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
@@ -1338,16 +1431,16 @@ const FlowEditor = () => {
               <div
                 key={node.id}
                 data-node-id={node.id}
-                className={`absolute bg-white rounded-lg shadow-lg p-4 transition-all hover:shadow-xl ${
-                  selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                className={`absolute bg-white rounded-lg shadow-lg border-2 border-gray-400 p-4 transition-all hover:shadow-xl ${
+                  selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-300' : ''
                 } ${
-                  selectedNode?.id === node.id ? 'ring-2 ring-purple-500' : ''
+                  selectedNode?.id === node.id ? 'ring-2 ring-purple-500 border-purple-300' : ''
                 } ${
-                  cutNodes.has(node.id) ? 'opacity-50 bg-gray-100 ring-2 ring-dashed ring-orange-400' : ''
+                  cutNodes.has(node.id) ? 'opacity-50 bg-gray-100 ring-2 ring-dashed ring-orange-400 border-orange-300' : ''
                 } ${
                   isDragging && draggedNodes.some(dn => dn.id === node.id)
-                    ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 z-50' 
-                    : 'cursor-grab hover:shadow-xl'
+                    ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 border-blue-400 z-50' 
+                    : 'cursor-grab hover:shadow-xl hover:border-gray-500'
                 }`}
                 style={{
                   left: node.position.x,
