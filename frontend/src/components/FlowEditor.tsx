@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
-import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard } from 'lucide-react';
+import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun } from 'lucide-react';
 
 // ============================================
 // Sistema de Internacionalización (i18n)
@@ -248,6 +248,71 @@ const translations = {
 // Contexto de idioma
 const LanguageContext = createContext<any>(null);
 
+// ============================================
+// Sistema de Temas (Theme System)
+// ============================================
+
+type Theme = 'light' | 'dark';
+
+interface ThemeContextType {
+  theme: Theme;
+  toggleTheme: () => void;
+  isDark: boolean;
+}
+
+const ThemeContext = createContext<ThemeContextType | null>(null);
+
+// Hook personalizado para usar tema
+const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};
+
+// Proveedor de tema
+const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+  const [theme, setTheme] = useState<Theme>(() => {
+    // Obtener tema guardado o usar preferencia del sistema
+    const savedTheme = localStorage.getItem('theme') as Theme;
+    if (savedTheme) return savedTheme;
+    
+    // Detectar preferencia del sistema
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  });
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    console.log('Toggling theme from', theme, 'to', newTheme);
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
+
+  const isDark = theme === 'dark';
+
+  // Aplicar clase al document element para Tailwind
+  useEffect(() => {
+    console.log('Theme effect running, isDark:', isDark, 'theme:', theme);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      console.log('Added dark class to document');
+    } else {
+      document.documentElement.classList.remove('dark');
+      console.log('Removed dark class from document');
+    }
+  }, [isDark, theme]);
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme, isDark }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
 // Hook personalizado para usar traducciones
 const useTranslation = () => {
   const context = useContext(LanguageContext);
@@ -284,6 +349,31 @@ const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Selector de tema
+const ThemeSelector = () => {
+  const { theme, toggleTheme, isDark } = useTheme();
+
+  return (
+    <button
+      onClick={() => {
+        console.log('Theme selector clicked, current theme:', theme);
+        toggleTheme();
+      }}
+      className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+    >
+      {isDark ? (
+        <Sun className="w-4 h-4 text-yellow-500" />
+      ) : (
+        <Moon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+      )}
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        {isDark ? 'Light' : 'Dark'}
+      </span>
+    </button>
+  );
+};
+
 // Selector de idioma
 const LanguageSelector = () => {
   const { language, changeLanguage } = useTranslation();
@@ -293,21 +383,21 @@ const LanguageSelector = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+        className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
       >
-        <Globe className="w-4 h-4" />
-        <span className="text-sm font-medium">{language.toUpperCase()}</span>
+        <Globe className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{language.toUpperCase()}</span>
       </button>
       
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border z-50">
+        <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-50">
           <button
             onClick={() => {
               changeLanguage('en');
               setIsOpen(false);
             }}
-            className={`w-full text-left px-4 py-2 hover:bg-gray-100 transition ${
-              language === 'en' ? 'bg-blue-50 text-blue-600' : ''
+            className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition ${
+              language === 'en' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'
             }`}
           >
             English
@@ -317,8 +407,8 @@ const LanguageSelector = () => {
               changeLanguage('es');
               setIsOpen(false);
             }}
-            className={`w-full text-left px-4 py-2 hover:bg-gray-100 transition ${
-              language === 'es' ? 'bg-blue-50 text-blue-600' : ''
+            className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition ${
+              language === 'es' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'
             }`}
           >
             Español
@@ -332,6 +422,7 @@ const LanguageSelector = () => {
 // Componente principal del editor con i18n
 const FlowEditor = () => {
   const { t } = useTranslation();
+  const { isDark } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
@@ -1065,7 +1156,7 @@ const FlowEditor = () => {
 
     return (
       <div 
-        className="multi-selection-panel fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg border p-4 z-50 min-w-80" 
+        className="multi-selection-panel fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-600 p-4 z-50 min-w-80" 
         style={{ 
           pointerEvents: 'auto', 
           boxShadow: '0 40px 80px -20px rgba(0, 0, 0, 0.4), 0 20px 25px -8px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)',
@@ -1081,14 +1172,14 @@ const FlowEditor = () => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-            <span className="font-medium">{t('selectedNodes')}: {selectedNodes.size}</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">{t('selectedNodes')}: {selectedNodes.size}</span>
           </div>
           <button
             onClick={clearSelection}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
             title={t('clearSelection')}
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
           </button>
         </div>
         
@@ -1107,7 +1198,7 @@ const FlowEditor = () => {
                 console.log('No nodes selected to copy');
               }
             }}
-            className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition text-sm"
             title={t('copyNodes')}
           >
             <Copy className="w-4 h-4" />
@@ -1127,7 +1218,7 @@ const FlowEditor = () => {
                 console.log('No nodes selected to cut');
               }
             }}
-            className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/50 transition text-sm"
             title={t('cutNodes')}
           >
             <Scissors className="w-4 h-4" />
@@ -1206,7 +1297,7 @@ const FlowEditor = () => {
                 console.log('No nodes selected to duplicate');
               }
             }}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition text-sm"
             title={t('duplicateAll')}
           >
             <Copy className="w-4 h-4" />
@@ -1262,7 +1353,7 @@ const FlowEditor = () => {
               e.preventDefault();
               e.stopPropagation();
             }}
-            className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition text-sm"
             title={t('deleteAll')}
             style={{ pointerEvents: 'auto', zIndex: 10000 }}
           >
@@ -1289,29 +1380,29 @@ const FlowEditor = () => {
     };
 
     return (
-      <div className="fixed right-0 top-16 h-full w-80 bg-white shadow-xl p-6 overflow-y-auto z-50">
+      <div className="fixed right-0 top-16 h-full w-80 bg-white dark:bg-gray-800 shadow-xl dark:shadow-gray-900/50 p-6 overflow-y-auto z-50">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
+          <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
             <span className="text-2xl">{node.icon}</span>
             {node.name}
           </h3>
           <button
             onClick={() => setShowProperties(false)}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
         </div>
         
         <div className="space-y-4">
           {node.config.fields?.map((field: string) => (
             <div key={field}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 {getFieldLabel(field)}
               </label>
               {field === 'include_subfolders' || field === 'direction' ? (
                 <select
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   value={formData[field] || ''}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                 >
@@ -1331,7 +1422,7 @@ const FlowEditor = () => {
               ) : (
                 <input
                   type="text"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                   value={formData[field] || ''}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                   placeholder={`${t('enter')} ${getFieldLabel(field).toLowerCase()}`}
@@ -1341,7 +1432,7 @@ const FlowEditor = () => {
           ))}
         </div>
 
-        <div className="mt-6 pt-6 border-t">
+        <div className="mt-6 pt-6 border-t dark:border-gray-700">
           <button className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
             {t('saveProperties')}
           </button>
@@ -1356,7 +1447,7 @@ const FlowEditor = () => {
 
     return (
       <div 
-        className="fixed bg-white rounded-lg shadow-xl border p-2 z-50 max-h-60 overflow-y-auto"
+        className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-900/50 border dark:border-gray-600 p-2 z-50 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-700"
         style={{
           left: showInsertMenu.x,
           top: showInsertMenu.y,
@@ -1364,7 +1455,7 @@ const FlowEditor = () => {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-xs font-medium text-gray-500 mb-2 px-2">Insert Node</div>
+        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 px-2">Insert Node</div>
         <div className="space-y-1">
           {availableComponents.map(component => (
             <button
@@ -1387,7 +1478,7 @@ const FlowEditor = () => {
                   { x: insertX - 60, y: insertY - 40 }
                 );
               }}
-              className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 rounded text-left text-sm cursor-pointer"
+              className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-left text-sm cursor-pointer text-gray-900 dark:text-gray-100"
               style={{ pointerEvents: 'auto' }}
             >
               <span className="text-lg">{component.icon}</span>
@@ -1402,13 +1493,13 @@ const FlowEditor = () => {
   // AI Prompt Dialog con traducciones
   const AIPromptDialog = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-2xl">
-        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <Code className="w-5 h-5" />
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl">
+        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-gray-100">
+          <Code className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           {t('generateFlowWithAI')}
         </h3>
         <textarea
-          className="w-full h-32 p-3 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500"
+          className="w-full h-32 p-3 border dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
           placeholder={t('describeAutomation')}
           value={aiPrompt}
           onChange={(e) => setAIPrompt(e.target.value)}
@@ -1426,7 +1517,7 @@ const FlowEditor = () => {
           </button>
           <button
             onClick={() => setShowAIPrompt(false)}
-            className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 transition"
+            className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
           >
             {t('cancel')}
           </button>
@@ -1436,16 +1527,16 @@ const FlowEditor = () => {
   );
 
   return (
-    <div className="h-screen bg-gray-50 flex">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Sidebar de componentes */}
-      <div className="w-64 bg-white shadow-lg p-4 overflow-y-auto">
+      <div className="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 overflow-y-auto">
         <div className="mb-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
             <input
               type="text"
               placeholder={t('searchComponents')}
-              className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -1455,7 +1546,7 @@ const FlowEditor = () => {
         <div className="space-y-4">
           {categories.map(categoryKey => (
             <div key={categoryKey}>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
                 {t(categoryKey)}
               </h3>
               <div className="space-y-1">
@@ -1467,10 +1558,10 @@ const FlowEditor = () => {
                       key={component.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, component)}
-                      className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-grab hover:bg-blue-50 hover:scale-105 transition-all duration-200 active:cursor-grabbing active:scale-95"
+                      className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-grab hover:bg-blue-50 dark:hover:bg-blue-900 hover:scale-105 transition-all duration-200 active:cursor-grabbing active:scale-95"
                     >
                       <span className="text-xl">{component.icon}</span>
-                      <span className="text-sm">{t(component.nameKey)}</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-200">{t(component.nameKey)}</span>
                     </div>
                   ))}
               </div>
@@ -1482,65 +1573,65 @@ const FlowEditor = () => {
       {/* Canvas principal */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <div className="bg-white shadow-sm border-b px-4 py-3 flex items-center justify-between">
+        <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition" title={t('save')}>
-              <Save className="w-5 h-5" />
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('save')}>
+              <Save className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition" title={t('undo')}>
-              <Undo className="w-5 h-5" />
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('undo')}>
+              <Undo className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition" title={t('redo')}>
-              <Redo className="w-5 h-5" />
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('redo')}>
+              <Redo className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
             <button
               onClick={() => handleZoom(0.1)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
               title={t('zoomIn')}
             >
-              <ZoomIn className="w-5 h-5" />
+              <ZoomIn className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            <span className="text-sm font-medium px-2">{Math.round(scale * 100)}%</span>
+            <span className="text-sm font-medium px-2 text-gray-900 dark:text-gray-100">{Math.round(scale * 100)}%</span>
             <button
               onClick={() => handleZoom(-0.1)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
               title={t('zoomOut')}
             >
-              <ZoomOut className="w-5 h-5" />
+              <ZoomOut className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
             <button
               onClick={() => {
                 setScale(1);
                 setOffset({ x: 0, y: 0 });
               }}
-              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
               title="Reset View"
             >
               Reset
             </button>
-            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
             <button
               onClick={() => {
                 const allNodeIds = new Set(nodes.map(node => node.id));
                 setSelectedNodes(allNodeIds);
               }}
-              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
               title={t('selectAll')}
             >
               {t('selectAll')}
             </button>
             <button
               onClick={clearSelection}
-              className="p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
               title={t('clearSelection')}
             >
               {t('clearSelection')}
             </button>
-            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
             <button
               onClick={() => setConnectionOrientation(connectionOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
-              className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+              className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
               title={`Connection orientation: ${connectionOrientation}`}
             >
               {connectionOrientation === 'horizontal' ? '↔' : '↕'}
@@ -1548,10 +1639,10 @@ const FlowEditor = () => {
             </button>
             {clipboard && clipboard.nodes.length > 0 && (
               <>
-                <div className="w-px h-6 bg-gray-300 mx-2" />
+                <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
                 <button
                   onClick={pasteNodes}
-                  className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition text-xs font-medium"
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
                   title={t('pasteNodes')}
                 >
                   <Clipboard className="w-4 h-4" />
@@ -1562,6 +1653,7 @@ const FlowEditor = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeSelector />
             <LanguageSelector />
             <button
               onClick={() => setShowAIPrompt(true)}
@@ -1580,15 +1672,15 @@ const FlowEditor = () => {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          className="flex-1 relative overflow-hidden bg-gray-50 cursor-grab"
+          className="flex-1 relative overflow-hidden bg-gray-50 dark:bg-gray-900 cursor-grab"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onMouseDown={handleCanvasMouseDown}
           onClick={handleCanvasClick}
           style={{
             backgroundImage: `
-              linear-gradient(to right, #d1d5db 1px, transparent 1px),
-              linear-gradient(to bottom, #d1d5db 1px, transparent 1px)
+              linear-gradient(to right, ${isDark ? '#374151' : '#d1d5db'} 1px, transparent 1px),
+              linear-gradient(to bottom, ${isDark ? '#374151' : '#d1d5db'} 1px, transparent 1px)
             `,
             backgroundSize: `${20 * scale}px ${20 * scale}px`,
             backgroundPosition: `${offset.x}px ${offset.y}px`,
@@ -1623,16 +1715,16 @@ const FlowEditor = () => {
               <div
                 key={node.id}
                 data-node-id={node.id}
-                className={`absolute bg-white rounded-lg shadow-lg border-2 border-gray-400 p-4 transition-all hover:shadow-xl ${
-                  selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-300' : ''
+                className={`absolute bg-white dark:bg-gray-800 rounded-lg shadow-lg border-2 border-gray-400 dark:border-gray-600 p-4 transition-all hover:shadow-xl dark:hover:shadow-gray-900/50 ${
+                  selectedNodes.has(node.id) ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600' : ''
                 } ${
-                  selectedNode?.id === node.id ? 'ring-2 ring-purple-500 border-purple-300' : ''
+                  selectedNode?.id === node.id ? 'ring-2 ring-purple-500 border-purple-300 dark:border-purple-600' : ''
                 } ${
-                  cutNodes.has(node.id) ? 'opacity-50 bg-gray-100 ring-2 ring-dashed ring-orange-400 border-orange-300' : ''
+                  cutNodes.has(node.id) ? 'opacity-50 bg-gray-100 dark:bg-gray-700 ring-2 ring-dashed ring-orange-400 border-orange-300 dark:border-orange-600' : ''
                 } ${
                   isDragging && draggedNodes.some(dn => dn.id === node.id)
-                    ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 border-blue-400 z-50' 
-                    : 'cursor-grab hover:shadow-xl hover:border-gray-500'
+                    ? 'cursor-grabbing shadow-2xl scale-105 ring-2 ring-blue-400 border-blue-400 dark:border-blue-500 z-50' 
+                    : 'cursor-grab hover:shadow-xl hover:border-gray-500 dark:hover:border-gray-400'
                 }`}
                 style={{
                   left: node.position.x,
@@ -1648,7 +1740,7 @@ const FlowEditor = () => {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-2xl">{node.icon}</span>
-                  <span className="text-sm font-medium">{node.name}</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{node.name}</span>
                 </div>
                 
                 {/* Connection points - adaptan según orientación */}
@@ -1853,6 +1945,7 @@ const FlowEditor = () => {
 // Componente principal de la aplicación con i18n
 const App = () => {
   const { t } = useTranslation();
+  const { isDark } = useTheme();
   const [currentView, setCurrentView] = useState('dashboard');
   const [flows] = useState([
     { id: 1, name: 'Invoice Processing', status: 'active', lastRun: '2', runs: 45 },
@@ -1868,63 +1961,63 @@ const App = () => {
       
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-sm">{t('activeFlows')}</span>
+            <span className="text-gray-500 dark:text-gray-400 text-sm">{t('activeFlows')}</span>
             <Activity className="w-5 h-5 text-green-500" />
           </div>
-          <div className="text-2xl font-bold">12</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">12</div>
           <div className="text-xs text-green-600 mt-1">+2 {t('thisWeek')}</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-sm">{t('totalExecutions')}</span>
+            <span className="text-gray-500 dark:text-gray-400 text-sm">{t('totalExecutions')}</span>
             <Play className="w-5 h-5 text-blue-500" />
           </div>
-          <div className="text-2xl font-bold">1,284</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">1,284</div>
           <div className="text-xs text-blue-600 mt-1">98% {t('successRate')}</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-sm">{t('timeSaved')}</span>
+            <span className="text-gray-500 dark:text-gray-400 text-sm">{t('timeSaved')}</span>
             <Clock className="w-5 h-5 text-purple-500" />
           </div>
-          <div className="text-2xl font-bold">47h</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">47h</div>
           <div className="text-xs text-purple-600 mt-1">{t('thisMonth')}</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-sm">{t('errors')}</span>
+            <span className="text-gray-500 dark:text-gray-400 text-sm">{t('errors')}</span>
             <AlertCircle className="w-5 h-5 text-red-500" />
           </div>
-          <div className="text-2xl font-bold">3</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">3</div>
           <div className="text-xs text-red-600 mt-1">{t('needsAttention')}</div>
         </div>
       </div>
 
       {/* Recent Events */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4">{t('recentEvents')}</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">{t('recentEvents')}</h2>
         <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+          <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
             <Check className="w-5 h-5 text-green-600" />
             <div className="flex-1">
-              <div className="font-medium text-sm">Invoice Processing {t('completedSuccessfully')}</div>
-              <div className="text-xs text-gray-500">2 {t('minutesAgo')}</div>
+              <div className="font-medium text-sm text-gray-900 dark:text-white">Invoice Processing {t('completedSuccessfully')}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">2 {t('minutesAgo')}</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+          <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <Activity className="w-5 h-5 text-blue-600" />
             <div className="flex-1">
-              <div className="font-medium text-sm">Data Migration {t('started')}</div>
-              <div className="text-xs text-gray-500">15 {t('minutesAgo')}</div>
+              <div className="font-medium text-sm text-gray-900 dark:text-white">Data Migration {t('started')}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">15 {t('minutesAgo')}</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
+          <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <div className="flex-1">
-              <div className="font-medium text-sm">Report Generation {t('failed')} - {t('connectionTimeout')}</div>
-              <div className="text-xs text-gray-500">1 {t('hourAgo')}</div>
+              <div className="font-medium text-sm text-gray-900 dark:text-white">Report Generation {t('failed')} - {t('connectionTimeout')}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">1 {t('hourAgo')}</div>
             </div>
           </div>
         </div>
@@ -1935,7 +2028,7 @@ const App = () => {
   const renderFlowsList = () => (
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">{t('myFlows')}</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('myFlows')}</h1>
         <button
           onClick={() => setCurrentView('editor')}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -1947,39 +2040,41 @@ const App = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {flows.map(flow => (
-          <div key={flow.id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-lg transition">
+          <div key={flow.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border dark:border-gray-700 p-6 hover:shadow-lg transition">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="font-semibold text-lg">{flow.name}</h3>
+              <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{flow.name}</h3>
               <span className={`px-2 py-1 text-xs rounded-full ${
-                flow.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                flow.status === 'active' 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
               }`}>
                 {t(flow.status)}
               </span>
             </div>
-            <div className="space-y-2 text-sm text-gray-600 mb-4">
+            <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
               <div className="flex justify-between">
                 <span>{t('lastRun')}:</span>
-                <span className="font-medium">
+                <span className="font-medium text-gray-900 dark:text-white">
                   {flow.lastRun} {parseInt(flow.lastRun) === 1 ? t('hourAgo') : t('hoursAgo')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>{t('totalRuns')}:</span>
-                <span className="font-medium">{flow.runs}</span>
+                <span className="font-medium text-gray-900 dark:text-white">{flow.runs}</span>
               </div>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setCurrentView('editor')}
-                className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm"
+                className="flex-1 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition text-sm"
               >
                 <Edit3 className="w-4 h-4 inline mr-1" />
                 {t('edit')}
               </button>
-              <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">
+              <button className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">
                 <Copy className="w-4 h-4" />
               </button>
-              <button className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition">
+              <button className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -1993,19 +2088,19 @@ const App = () => {
     <div className="h-screen flex">
       {/* Sidebar Navigation */}
       {currentView !== 'editor' && (
-        <div className="w-64 bg-gray-900 text-white p-6">
+        <div className="w-64 bg-gray-900 dark:bg-gray-950 text-white p-6">
           <div className="mb-8">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
               Agentiqware
             </h1>
-            <p className="text-xs text-gray-400 mt-1">{t('platformSubtitle')}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('platformSubtitle')}</p>
           </div>
 
           <nav className="space-y-2">
             <button
               onClick={() => setCurrentView('dashboard')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${
-                currentView === 'dashboard' ? 'bg-gray-800' : 'hover:bg-gray-800'
+                currentView === 'dashboard' ? 'bg-gray-800 dark:bg-gray-900' : 'hover:bg-gray-800 dark:hover:bg-gray-900'
               }`}
             >
               <Home className="w-5 h-5" />
@@ -2014,23 +2109,24 @@ const App = () => {
             <button
               onClick={() => setCurrentView('flows')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${
-                currentView === 'flows' ? 'bg-gray-800' : 'hover:bg-gray-800'
+                currentView === 'flows' ? 'bg-gray-800 dark:bg-gray-900' : 'hover:bg-gray-800 dark:hover:bg-gray-900'
               }`}
             >
               <GitBranch className="w-5 h-5" />
               {t('flows')}
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 transition">
+            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-900 transition">
               <FileText className="w-5 h-5" />
               {t('logs')}
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 transition">
+            <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-900 transition">
               <Settings className="w-5 h-5" />
               {t('settings')}
             </button>
           </nav>
 
-          <div className="mt-auto pt-8 border-t border-gray-800 space-y-2">
+          <div className="mt-auto pt-8 border-t border-gray-800 dark:border-gray-700 space-y-2">
+            <ThemeSelector />
             <LanguageSelector />
             <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 transition text-red-400">
               <LogOut className="w-5 h-5" />
@@ -2041,7 +2137,7 @@ const App = () => {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 bg-gray-50 overflow-auto">
+      <div className="flex-1 bg-gray-50 dark:bg-gray-900 overflow-auto">
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'flows' && renderFlowsList()}
         {currentView === 'editor' && <FlowEditor />}
@@ -2050,12 +2146,14 @@ const App = () => {
   );
 };
 
-// Componente raíz con proveedor de idioma
+// Componente raíz con proveedores de idioma y tema
 const RootApp = () => {
   return (
-    <LanguageProvider>
-      <App />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 };
 
