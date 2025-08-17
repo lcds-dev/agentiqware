@@ -591,7 +591,7 @@ const FlowEditor = ({
     }
   }, [nodes, selectedNodeId]);
 
-  const selectNodesInBox = (box: {x: number, y: number, width: number, height: number}) => {
+  const selectNodesInBox = useCallback((box: {x: number, y: number, width: number, height: number}) => {
     const selected = new Set<string>();
     nodes.forEach(node => {
       const nodeX = node.position.x;
