@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
+import React, { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
 import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun } from 'lucide-react';
 
 // ============================================
@@ -420,13 +420,20 @@ const LanguageSelector = () => {
 };
 
 // Componente principal del editor con i18n
-const FlowEditor = () => {
+const FlowEditor = ({ 
+  globalPropertyPanelState, 
+  setGlobalPropertyPanelState 
+}: {
+  globalPropertyPanelState: any;
+  setGlobalPropertyPanelState: any;
+}) => {
   const { t } = useTranslation();
   const { isDark } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
@@ -551,7 +558,18 @@ const FlowEditor = () => {
   const clearSelection = useCallback(() => {
     setSelectedNodes(new Set());
     setSelectedNode(null);
+    setSelectedNodeId(null);
   }, []);
+
+  // Sync selectedNode with current node data
+  useEffect(() => {
+    if (selectedNodeId) {
+      const currentNode = nodes.find(n => n.id === selectedNodeId);
+      if (currentNode) {
+        setSelectedNode(currentNode);
+      }
+    }
+  }, [nodes, selectedNodeId]);
 
   const selectNodesInBox = (box: {x: number, y: number, width: number, height: number}) => {
     const selected = new Set<string>();
@@ -672,9 +690,17 @@ const FlowEditor = () => {
 
   // Manejar movimiento del mouse
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    // Actualizar posición del mouse para conexiones temporales
+    // Skip if interacting with PropertyPanel
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-property-panel]')) {
+      return;
+    }
+    
+    // Obtener rect una vez para usar en todas las operaciones
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
+    
+    // Solo actualizar posición del mouse si se está conectando
+    if (connectingFrom && rect) {
       setMousePosition({
         x: (e.clientX - rect.left - offset.x) / scale,
         y: (e.clientY - rect.top - offset.y) / scale
@@ -740,7 +766,7 @@ const FlowEditor = () => {
       
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
-  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, selectNodesInBox]);
+  }, [isDragging, draggedNode, dragStart, offset, scale, isDraggingCanvas, lastMousePos, isSelecting, selectionStart, draggedNodes, selectNodesInBox, connectingFrom]);
 
   // Manejar fin del drag
   const handleMouseUp = useCallback((e: MouseEvent) => {
@@ -761,13 +787,17 @@ const FlowEditor = () => {
 
   // Manejar drag del canvas
   const handleCanvasMouseDown = (e: any) => {
-    // Verificar si el clic es en el canvas (no en un nodo u otro elemento)
+    // Verificar si el clic es en elementos que NO deberían ser interceptados
     const isNodeClick = e.target.closest('[data-node-id]');
     const isConnectionPoint = e.target.classList?.contains('connection-point');
     const isMultiSelectionPanel = e.target.closest('.multi-selection-panel');
+    const isPropertyPanel = e.target.closest('[data-property-panel]');
+    const isFixedElement = e.target.closest('[style*="position: fixed"]') || 
+                          e.target.style?.position === 'fixed' ||
+                          getComputedStyle(e.target).position === 'fixed';
     
     // Solo proceder si el clic es en el canvas (fondo) y no en otros elementos
-    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel) {
+    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel && !isPropertyPanel && !isFixedElement) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       
@@ -881,12 +911,16 @@ const FlowEditor = () => {
 
   // Manejar clic en canvas (para deseleccionar y cancelar conexiones)
   const handleCanvasClick = (e: any) => {
-    // Verificar si el clic NO fue en un nodo, connection point, o en el MultiSelectionPanel
+    // Verificar si el clic NO fue en elementos que deberían manejar sus propios eventos
     const isNodeClick = e.target.closest('[data-node-id]');
     const isConnectionPoint = e.target.classList?.contains('connection-point');
     const isMultiSelectionPanel = e.target.closest('.multi-selection-panel');
+    const isPropertyPanel = e.target.closest('[data-property-panel]');
+    const isFixedElement = e.target.closest('[style*="position: fixed"]') || 
+                          e.target.style?.position === 'fixed' ||
+                          getComputedStyle(e.target).position === 'fixed';
     
-    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel) {
+    if (!isNodeClick && !isConnectionPoint && !isMultiSelectionPanel && !isPropertyPanel && !isFixedElement) {
       // Cerrar menú de inserción si está abierto
       setShowInsertMenu(null);
       
@@ -945,6 +979,12 @@ const FlowEditor = () => {
 
   // Manejar teclas
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Skip if typing in PropertyPanel
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-property-panel]') || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+      return;
+    }
+    
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (selectedNodes.size > 0) {
         // Eliminar nodos seleccionados
@@ -1002,7 +1042,7 @@ const FlowEditor = () => {
   }, [handleMouseMove, handleMouseUp, handleWheel, handleKeyDown]);
 
   // Renderizar conexiones
-  const renderConnections = () => {
+  const renderedConnections = useMemo(() => {
     const allConnections = [...connections];
     
     // Añadir conexión temporal si se está conectando
@@ -1020,8 +1060,6 @@ const FlowEditor = () => {
         allConnections.push(tempConn);
       }
     }
-    
-    console.log('Rendering connections:', allConnections.length);
     
     return allConnections.map(conn => {
       const fromNode = nodes.find(n => n.id === conn.from);
@@ -1124,7 +1162,7 @@ const FlowEditor = () => {
         </g>
       );
     });
-  };
+  }, [connections, connectingFrom, nodes, connectionOrientation, mousePosition]);
 
   // Mapeo de campos a claves de traducción
   const fieldTranslationMap = {
@@ -1365,22 +1403,51 @@ const FlowEditor = () => {
     );
   };
 
+
   // Panel de propiedades dinámico con traducciones
   const PropertyPanel = ({ node }: { node: any }) => {
-    const [formData, setFormData] = useState(node.data || {});
+    const [formData, setFormData] = useState<any>(node.data || {});
 
     const handleFieldChange = (field: string, value: any) => {
-      setFormData({ ...formData, [field]: value });
-      node.data = { ...formData, [field]: value };
+      console.log('=== handleFieldChange called ===');
+      console.log('Field:', field, 'Value:', value);
+      console.log('Current formData:', formData);
+      
+      const newFormData = { ...formData, [field]: value };
+      console.log('New formData:', newFormData);
+      
+      setFormData(newFormData);
+      
+      setNodes(prevNodes => 
+        prevNodes.map(n => 
+          n.id === node.id 
+            ? { ...n, data: newFormData }
+            : n
+        )
+      );
+      
+      console.log('=== handleFieldChange completed ===');
     };
 
     const getFieldLabel = (field: string) => {
-      const translationKey = (fieldTranslationMap as any)[field];
-      return translationKey ? t(translationKey) : field.replace(/_/g, ' ').charAt(0).toUpperCase() + field.replace(/_/g, ' ').slice(1);
+      return field.replace(/_/g, ' ').charAt(0).toUpperCase() + field.replace(/_/g, ' ').slice(1);
     };
 
+    const fields = node.config?.fields || [];
+
     return (
-      <div className="fixed right-0 top-16 h-full w-80 bg-white dark:bg-gray-800 shadow-xl dark:shadow-gray-900/50 p-6 overflow-y-auto z-50">
+      <div 
+        data-property-panel="true"
+        className="fixed right-0 top-16 h-full w-80 bg-white dark:bg-gray-800 shadow-xl dark:shadow-gray-900/50 p-6 overflow-y-auto property-panel-internal"
+        style={{ 
+          zIndex: 9999,
+          pointerEvents: 'auto'
+        }}
+        onClick={(e) => {
+          console.log('Panel clicked!');
+          e.stopPropagation();
+        }}
+      >
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
             <span className="text-2xl">{node.icon}</span>
@@ -1395,45 +1462,60 @@ const FlowEditor = () => {
         </div>
         
         <div className="space-y-4">
-          {node.config.fields?.map((field: string) => (
+          {/* Test button */}
+          <button
+            onClick={() => {
+              console.log('TEST BUTTON CLICKED!');
+              alert('Button works!');
+            }}
+            className="w-full bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+            style={{ pointerEvents: 'auto' }}
+          >
+            Click Test (Should Work)
+          </button>
+          
+          {/* Simple test input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Test Input (should work)
+            </label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border border-red-500 rounded-lg focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              defaultValue=""
+              placeholder="Type here to test..."
+              style={{ pointerEvents: 'auto' }}
+              onFocus={() => console.log('Input focused!')}
+              onKeyDown={(e) => console.log('Key pressed:', e.key)}
+              onChange={(e) => console.log('Input changed:', e.target.value)}
+            />
+          </div>
+          
+          {/* Actual fields */}
+          {fields.map((field: string) => (
             <div key={field}>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 {getFieldLabel(field)}
               </label>
-              {field === 'include_subfolders' || field === 'direction' ? (
-                <select
-                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  value={formData[field] || ''}
-                  onChange={(e) => handleFieldChange(field, e.target.value)}
-                >
-                  <option value="">{t('select')}</option>
-                  {field === 'include_subfolders' ? (
-                    <>
-                      <option value="yes">{t('yes')}</option>
-                      <option value="no">{t('no')}</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="horizontal">{t('horizontal')}</option>
-                      <option value="vertical">{t('vertical')}</option>
-                    </>
-                  )}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                  value={formData[field] || ''}
-                  onChange={(e) => handleFieldChange(field, e.target.value)}
-                  placeholder={`${t('enter')} ${getFieldLabel(field).toLowerCase()}`}
-                />
-              )}
+              <input
+                type="text"
+                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                value={formData[field] || ''}
+                onChange={(e) => {
+                  console.log('Input changed:', field, e.target.value);
+                  handleFieldChange(field, e.target.value);
+                }}
+                placeholder={`Enter ${field}`}
+              />
             </div>
           ))}
         </div>
 
         <div className="mt-6 pt-6 border-t dark:border-gray-700">
-          <button className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+          <button 
+            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
+            onClick={() => setShowProperties(false)}
+          >
             {t('saveProperties')}
           </button>
         </div>
@@ -1447,7 +1529,7 @@ const FlowEditor = () => {
 
     return (
       <div 
-        className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-900/50 border dark:border-gray-600 p-2 z-50 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-700"
+        className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-900/50 border dark:border-gray-600 p-2 z-50 max-h-60 overflow-y-auto insert-menu"
         style={{
           left: showInsertMenu.x,
           top: showInsertMenu.y,
@@ -1529,7 +1611,7 @@ const FlowEditor = () => {
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Sidebar de componentes */}
-      <div className="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 overflow-y-auto">
+      <div className="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 overflow-y-auto component-sidebar">
         <div className="mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
@@ -1700,7 +1782,7 @@ const FlowEditor = () => {
               pointerEvents: 'none'
             }}
           >
-            {renderConnections()}
+            {renderedConnections}
           </svg>
 
           {/* Nodos */}
@@ -1733,7 +1815,27 @@ const FlowEditor = () => {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedNode(node);
+                  setSelectedNodeId(node.id);
+                  
+                  // Abrir PropertyPanel fuera del FlowEditor
+                  setGlobalPropertyPanelState({
+                    showProperties: true,
+                    selectedNode: node,
+                    onFieldChange: (field: string, value: any) => {
+                      setNodes(prevNodes => 
+                        prevNodes.map(n => 
+                          n.id === node.id 
+                            ? { ...n, data: { ...n.data, [field]: value } }
+                            : n
+                        )
+                      );
+                    },
+                    onClose: () => {
+                      setGlobalPropertyPanelState((prev: any) => ({ ...prev, showProperties: false }));
+                      setShowProperties(false);
+                    }
+                  });
+                  
                   setShowProperties(true);
                 }}
                 onMouseDown={(e) => handleNodeMouseDown(e, node)}
@@ -1854,7 +1956,12 @@ const FlowEditor = () => {
           )}
 
           {/* Panel de propiedades */}
-          {showProperties && selectedNode && <PropertyPanel node={selectedNode} />}
+          {showProperties && selectedNode && (
+            <PropertyPanel 
+              key={selectedNode.id} 
+              node={selectedNode} 
+            />
+          )}
 
           {/* Botones + como elementos HTML absolutos */}
           {connections.map(conn => {
@@ -1942,11 +2049,496 @@ const FlowEditor = () => {
     );
 };
 
+// Test component completamente aislado (movido fuera de FlowEditor)
+const TestPanel = () => {
+  const [testValue, setTestValue] = useState('');
+  
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '300px',
+        height: '200px',
+        backgroundColor: 'red',
+        color: 'white',
+        padding: '20px',
+        zIndex: 99999,
+        border: '5px solid yellow'
+      }}
+      onClick={() => console.log('TestPanel clicked!')}
+    >
+      <h1>TEST PANEL (OUTSIDE)</h1>
+      <button 
+        onClick={() => {
+          console.log('OUTSIDE TEST BUTTON CLICKED!');
+          alert('OUTSIDE TEST BUTTON WORKS!');
+        }}
+        style={{
+          padding: '10px',
+          fontSize: '16px',
+          backgroundColor: 'green',
+          color: 'white',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        CLICK ME OUTSIDE
+      </button>
+      <br/><br/>
+      <input 
+        type="text" 
+        value={testValue}
+        onChange={(e) => {
+          console.log('Outside Input changed:', e.target.value);
+          setTestValue(e.target.value);
+        }}
+        style={{
+          padding: '5px',
+          fontSize: '14px',
+          backgroundColor: 'white',
+          color: 'black'
+        }}
+        placeholder="Type here..."
+      />
+      <div>Value: {testValue}</div>
+    </div>
+  );
+};
+
+// Mapeo de campos a claves de traducción
+const fieldTranslationMap = {
+  'folder': 'folderForSearch',
+  'pattern': 'filesPatternToSearch',
+  'include_subfolders': 'includeSubFolders',
+  'result': 'result',
+  'handler': 'handler',
+  'dataframes': 'dataframes',
+  'direction': 'direction',
+  'excel_file_name': 'excelFileName',
+  'sheet_name': 'sheet',
+  'destination': 'destinationHandler',
+  'condition': 'condition',
+  'operator': 'operator',
+  'value': 'value',
+  'text': 'text',
+  'delay': 'delay',
+  'special_keys': 'specialKeys',
+  'x': 'X',
+  'y': 'Y',
+  'button': 'button',
+  'clicks': 'clicks'
+};
+
+// Hook para aplicar scrollbars personalizados
+const useCustomScrollbars = () => {
+  const { isDark } = useTheme();
+  
+  useEffect(() => {
+    const styleId = 'global-custom-scrollbars';
+    
+    // Remover estilo existente
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
+    const styleElement = document.createElement('style');
+    styleElement.id = styleId;
+    
+    const scrollbarCSS = `
+      /* Scrollbars para sidebar de componentes */
+      .component-sidebar::-webkit-scrollbar {
+        width: 4px !important;
+      }
+      .component-sidebar::-webkit-scrollbar-track {
+        background: ${isDark ? '#1f2937' : '#f9fafb'} !important;
+        border-radius: 2px !important;
+      }
+      .component-sidebar::-webkit-scrollbar-thumb {
+        background: ${isDark ? '#6b7280' : '#d1d5db'} !important;
+        border-radius: 2px !important;
+      }
+      .component-sidebar::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? '#9ca3af' : '#9ca3af'} !important;
+      }
+      
+      /* Scrollbars para menú de inserción */
+      .insert-menu::-webkit-scrollbar {
+        width: 3px !important;
+      }
+      .insert-menu::-webkit-scrollbar-track {
+        background: ${isDark ? '#374151' : '#f3f4f6'} !important;
+        border-radius: 2px !important;
+      }
+      .insert-menu::-webkit-scrollbar-thumb {
+        background: ${isDark ? '#6b7280' : '#d1d5db'} !important;
+        border-radius: 2px !important;
+      }
+      .insert-menu::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? '#9ca3af' : '#9ca3af'} !important;
+      }
+      
+      /* Scrollbars para contenido principal */
+      .main-content::-webkit-scrollbar {
+        width: 4px !important;
+      }
+      .main-content::-webkit-scrollbar-track {
+        background: ${isDark ? '#111827' : '#ffffff'} !important;
+        border-radius: 2px !important;
+      }
+      .main-content::-webkit-scrollbar-thumb {
+        background: ${isDark ? '#6b7280' : '#d1d5db'} !important;
+        border-radius: 2px !important;
+      }
+      .main-content::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? '#9ca3af' : '#9ca3af'} !important;
+      }
+      
+      /* Scrollbars para panel de propiedades interno */
+      .property-panel-internal::-webkit-scrollbar {
+        width: 3px !important;
+      }
+      .property-panel-internal::-webkit-scrollbar-track {
+        background: ${isDark ? '#1f2937' : '#f9fafb'} !important;
+        border-radius: 2px !important;
+      }
+      .property-panel-internal::-webkit-scrollbar-thumb {
+        background: ${isDark ? '#6b7280' : '#d1d5db'} !important;
+        border-radius: 2px !important;
+      }
+      .property-panel-internal::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? '#9ca3af' : '#9ca3af'} !important;
+      }
+    `;
+    
+    styleElement.innerHTML = scrollbarCSS;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      const style = document.getElementById(styleId);
+      if (style) {
+        style.remove();
+      }
+    };
+  }, [isDark]);
+};
+
+// PropertyPanel external que funciona fuera del FlowEditor
+const ExternalPropertyPanel = ({ node, onFieldChange, onClose }: any) => {
+  const { t } = useTranslation();
+  const { isDark } = useTheme();
+  const [formData, setFormData] = useState<any>(node.data || {});
+  
+  const handleFieldChange = (field: string, value: any) => {
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    if (onFieldChange) {
+      onFieldChange(field, value);
+    }
+  };
+
+  const getFieldLabel = (field: string) => {
+    const translationKey = (fieldTranslationMap as any)[field];
+    return translationKey ? t(translationKey) : field.replace(/_/g, ' ').charAt(0).toUpperCase() + field.replace(/_/g, ' ').slice(1);
+  };
+
+  const fields = node.config?.fields || [];
+
+  // ID único para el panel
+  const panelId = `property-panel-${node.id}`;
+  
+  // Crear un contenedor interno con scrollbar personalizado
+  const scrollableContentRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    // Crear CSS dinámico cada vez que cambie el tema
+    const timestamp = Date.now();
+    const uniqueClass = `scrollable-content-${timestamp}`;
+    
+    if (scrollableContentRef.current) {
+      scrollableContentRef.current.className = uniqueClass;
+    }
+    
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      .${uniqueClass} {
+        height: 100%;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding-right: 4px;
+      }
+      
+      .${uniqueClass}::-webkit-scrollbar {
+        width: 4px !important;
+      }
+      
+      .${uniqueClass}::-webkit-scrollbar-track {
+        background: ${isDark ? '#1f2937' : '#f9fafb'} !important;
+        border-radius: 2px !important;
+      }
+      
+      .${uniqueClass}::-webkit-scrollbar-thumb {
+        background: ${isDark ? '#6b7280' : '#d1d5db'} !important;
+        border-radius: 2px !important;
+      }
+      
+      .${uniqueClass}::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? '#9ca3af' : '#9ca3af'} !important;
+      }
+    `;
+    
+    document.head.appendChild(styleElement);
+    console.log('Nuevo scrollbar creado:', uniqueClass, 'isDark:', isDark);
+    
+    return () => {
+      if (styleElement.parentNode) {
+        styleElement.parentNode.removeChild(styleElement);
+      }
+    };
+  }, [isDark]);
+
+  return (
+    <div 
+      id={panelId}
+      data-property-panel
+      style={{
+        position: 'fixed',
+        right: '0',
+        top: '64px',
+        width: '320px',
+        height: 'calc(100vh - 64px)',
+        backgroundColor: isDark ? '#1f2937' : 'white',
+        color: isDark ? '#f9fafb' : '#111827',
+        padding: '24px',
+        zIndex: 99999,
+        border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+        boxShadow: isDark 
+          ? '-4px 0 6px -1px rgba(0, 0, 0, 0.3), -10px 0 15px -3px rgba(0, 0, 0, 0.2)' 
+          : '-4px 0 6px -1px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden' // El contenedor padre no hace scroll
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '24px' }}>{node.icon}</span>
+          {node.name}
+        </h3>
+        <button 
+          onClick={() => onClose && onClose()}
+          style={{
+            padding: '8px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: '6px',
+            color: isDark ? '#9ca3af' : '#6b7280',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isDark ? '#374151' : '#f3f4f6';
+            e.currentTarget.style.color = isDark ? '#f9fafb' : '#111827';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = isDark ? '#9ca3af' : '#6b7280';
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      
+      {/* Contenido scrollable */}
+      <div 
+        ref={scrollableContentRef}
+        style={{ 
+          height: 'calc(100% - 80px)', // Restar altura del header
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '16px' 
+        }}
+      >
+        {fields.map((field: string) => (
+          <div key={field}>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: isDark ? '#d1d5db' : '#374151', 
+              marginBottom: '4px' 
+            }}>
+              {getFieldLabel(field)}
+            </label>
+            {field === 'include_subfolders' || field === 'direction' ? (
+              <select
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  backgroundColor: isDark ? '#374151' : 'white',
+                  color: isDark ? '#f9fafb' : '#111827',
+                  outline: 'none',
+                  transition: 'border-color 0.2s, box-shadow 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.1)'}`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = isDark ? '#4b5563' : '#d1d5db';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                value={formData[field] || ''}
+                onChange={(e) => handleFieldChange(field, e.target.value)}
+              >
+                <option value="">{t('select')}</option>
+                {field === 'include_subfolders' ? (
+                  <>
+                    <option value="yes">{t('yes')}</option>
+                    <option value="no">{t('no')}</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="horizontal">{t('horizontal')}</option>
+                    <option value="vertical">{t('vertical')}</option>
+                  </>
+                )}
+              </select>
+            ) : (
+              <input
+                type="text"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  backgroundColor: isDark ? '#374151' : 'white',
+                  color: isDark ? '#f9fafb' : '#111827',
+                  outline: 'none',
+                  transition: 'border-color 0.2s, box-shadow 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.1)'}`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = isDark ? '#4b5563' : '#d1d5db';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                value={formData[field] || ''}
+                onChange={(e) => handleFieldChange(field, e.target.value)}
+                placeholder={`Enter ${getFieldLabel(field).toLowerCase()}`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      {/* Fin del contenido scrollable */}
+
+      <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: `1px solid ${isDark ? '#374151' : '#e5e7eb'}` }}>
+        <button 
+          style={{
+            width: '100%',
+            backgroundColor: '#2563eb',
+            color: 'white',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '500',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#1d4ed8';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#2563eb';
+          }}
+          onClick={() => onClose && onClose()}
+        >
+          {t('saveProperties')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Test global completamente independiente
+const GlobalTest = () => {
+  const [value, setValue] = useState('');
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '10px',
+      left: '10px',
+      width: '200px',
+      height: '150px',
+      backgroundColor: 'purple',
+      color: 'white',
+      padding: '10px',
+      zIndex: 999999,
+      border: '3px solid orange'
+    }}>
+      <h2>GLOBAL TEST</h2>
+      <button 
+        onClick={() => {
+          console.log('GLOBAL BUTTON CLICKED!');
+          window.alert('GLOBAL BUTTON WORKS!');
+        }}
+        style={{
+          backgroundColor: 'yellow',
+          color: 'black',
+          padding: '5px',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        GLOBAL CLICK
+      </button>
+      <br/><br/>
+      <input 
+        value={value}
+        onChange={(e) => {
+          console.log('GLOBAL INPUT:', e.target.value);
+          setValue(e.target.value);
+        }}
+        style={{ width: '100%' }}
+      />
+      <div>Val: {value}</div>
+    </div>
+  );
+};
+
 // Componente principal de la aplicación con i18n
 const App = () => {
   const { t } = useTranslation();
   const { isDark } = useTheme();
   const [currentView, setCurrentView] = useState('dashboard');
+  
+  // Aplicar scrollbars personalizados globalmente
+  useCustomScrollbars();
+  
+  // Estado global para PropertyPanel
+  const [globalPropertyPanelState, setGlobalPropertyPanelState] = useState<{
+    showProperties: boolean;
+    selectedNode: any;
+    onFieldChange: ((field: string, value: any) => void) | null;
+    onClose: (() => void) | null;
+  }>({
+    showProperties: false,
+    selectedNode: null,
+    onFieldChange: null,
+    onClose: null
+  });
   const [flows] = useState([
     { id: 1, name: 'Invoice Processing', status: 'active', lastRun: '2', runs: 45 },
     { id: 2, name: 'Data Migration', status: 'inactive', lastRun: '1', runs: 12 },
@@ -2137,11 +2729,26 @@ const App = () => {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 bg-gray-50 dark:bg-gray-900 overflow-auto">
+      <div className="flex-1 bg-gray-50 dark:bg-gray-900 overflow-auto main-content">
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'flows' && renderFlowsList()}
-        {currentView === 'editor' && <FlowEditor />}
+        {currentView === 'editor' && (
+          <FlowEditor 
+            globalPropertyPanelState={globalPropertyPanelState}
+            setGlobalPropertyPanelState={setGlobalPropertyPanelState}
+          />
+        )}
       </div>
+      
+      
+      {/* Property Panel REAL fuera del FlowEditor */}
+      {currentView === 'editor' && globalPropertyPanelState.showProperties && globalPropertyPanelState.selectedNode && (
+        <ExternalPropertyPanel 
+          node={globalPropertyPanelState.selectedNode}
+          onFieldChange={globalPropertyPanelState.onFieldChange}
+          onClose={globalPropertyPanelState.onClose}
+        />
+      )}
     </div>
   );
 };
