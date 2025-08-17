@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
+import useUndoable from 'use-undoable';
 import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun } from 'lucide-react';
 
 // ============================================
@@ -430,8 +431,8 @@ const FlowEditor = ({
   const { t } = useTranslation();
   const { isDark } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<any[]>([]);
-  const [connections, setConnections] = useState<any[]>([]);
+  const [nodes, setNodes, { undo: undoNodes, redo: redoNodes, canUndo: canUndoNodes, canRedo: canRedoNodes }] = useUndoable<any[]>([]);
+  const [connections, setConnections, { undo: undoConnections, redo: redoConnections, canUndo: canUndoConnections, canRedo: canRedoConnections }] = useUndoable<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
@@ -646,6 +647,21 @@ const FlowEditor = ({
       setSelectedNodes(pastedNodeIds);
     }
   }, [clipboard]);
+
+  // Funciones unificadas de undo/redo
+  const handleUndo = useCallback(() => {
+    undoNodes();
+    undoConnections();
+  }, [undoNodes, undoConnections]);
+
+  const handleRedo = useCallback(() => {
+    redoNodes();
+    redoConnections();
+  }, [redoNodes, redoConnections]);
+
+  // Verificar si se puede hacer undo/redo
+  const canUndo = canUndoNodes || canUndoConnections;
+  const canRedo = canRedoNodes || canRedoConnections;
 
   // Manejar drag & drop desde sidebar
   const handleDragStart = (e: any, component: any) => {
@@ -1015,9 +1031,15 @@ const FlowEditor = ({
       } else if (e.key === 'v') {
         e.preventDefault();
         pasteNodes();
+      } else if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
       }
     }
-  }, [selectedNodes, nodes, clearSelection, setConnectingFrom, copySelectedNodes, cutSelectedNodes, pasteNodes]);
+  }, [selectedNodes, nodes, clearSelection, setConnectingFrom, copySelectedNodes, cutSelectedNodes, pasteNodes, handleUndo, handleRedo]);
 
   // Efectos para event listeners
   useEffect(() => {
@@ -1660,11 +1682,29 @@ const FlowEditor = ({
             <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('save')}>
               <Save className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('undo')}>
-              <Undo className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            <button 
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className={`p-2 rounded-lg transition ${
+                canUndo 
+                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
+                  : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              }`} 
+              title={t('undo')}
+            >
+              <Undo className="w-5 h-5" />
             </button>
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('redo')}>
-              <Redo className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            <button 
+              onClick={handleRedo}
+              disabled={!canRedo}
+              className={`p-2 rounded-lg transition ${
+                canRedo 
+                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
+                  : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              }`} 
+              title={t('redo')}
+            >
+              <Redo className="w-5 h-5" />
             </button>
             <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
             <button
