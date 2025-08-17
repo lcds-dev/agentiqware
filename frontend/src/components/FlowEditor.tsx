@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
 import useUndoable from 'use-undoable';
-import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun } from 'lucide-react';
+import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun, ArrowLeft } from 'lucide-react';
 
 // ============================================
 // Sistema de Internacionalización (i18n)
@@ -48,6 +48,7 @@ const translations = {
     
     // Flow Editor
     searchComponents: 'Search components...',
+    backToFlows: 'Back to Flows',
     save: 'Save',
     undo: 'Undo',
     redo: 'Redo',
@@ -62,6 +63,12 @@ const translations = {
     describeAutomation: 'Describe your automation flow in natural language...',
     generateFlow: 'Generate Flow',
     cancel: 'Cancel',
+    
+    // Exit Confirmation
+    unsavedChangesTitle: 'Unsaved Changes',
+    unsavedChangesMessage: 'You have unsaved changes. What would you like to do?',
+    saveAndExit: 'Save and Exit',
+    exitWithoutSaving: 'Exit without Saving',
     
     // Component Categories
     fileSystem: 'File System',
@@ -167,6 +174,7 @@ const translations = {
     
     // Flow Editor
     searchComponents: 'Buscar componentes...',
+    backToFlows: 'Volver a Flujos',
     save: 'Guardar',
     undo: 'Deshacer',
     redo: 'Rehacer',
@@ -181,6 +189,12 @@ const translations = {
     describeAutomation: 'Describe tu flujo de automatización en lenguaje natural...',
     generateFlow: 'Generar Flujo',
     cancel: 'Cancelar',
+    
+    // Exit Confirmation
+    unsavedChangesTitle: 'Cambios sin Guardar',
+    unsavedChangesMessage: 'Tienes cambios sin guardar. ¿Qué te gustaría hacer?',
+    saveAndExit: 'Guardar y Salir',
+    exitWithoutSaving: 'Salir sin Guardar',
     
     // Component Categories
     fileSystem: 'Sistema de Archivos',
@@ -423,10 +437,12 @@ const LanguageSelector = () => {
 // Componente principal del editor con i18n
 const FlowEditor = ({ 
   globalPropertyPanelState, 
-  setGlobalPropertyPanelState 
+  setGlobalPropertyPanelState,
+  onBackToFlowsList
 }: {
   globalPropertyPanelState: any;
   setGlobalPropertyPanelState: any;
+  onBackToFlowsList?: () => void;
 }) => {
   const { t } = useTranslation();
   const { isDark } = useTheme();
@@ -457,6 +473,8 @@ const FlowEditor = ({
   const [showAIPrompt, setShowAIPrompt] = useState(false);
   const [aiPrompt, setAIPrompt] = useState('');
   const [connectionOrientation, setConnectionOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   const [showInsertMenu, setShowInsertMenu] = useState<{connectionId: string, x: number, y: number, canvasX?: number, canvasY?: number} | null>(null);
 
   // Componentes disponibles con traducciones
@@ -538,6 +556,7 @@ const FlowEditor = ({
       data: {}
     };
     setNodes([...nodes, newNode]);
+    setHasUnsavedChanges(true);
     return newNode;
   };
 
@@ -665,7 +684,15 @@ const FlowEditor = ({
 
   // Manejar drag & drop desde sidebar
   const handleDragStart = (e: any, component: any) => {
-    e.dataTransfer.setData('component', JSON.stringify(component));
+    try {
+      if (component) {
+        e.dataTransfer.setData('component', JSON.stringify(component));
+      } else {
+        console.warn('No component data to drag');
+      }
+    } catch (error) {
+      console.error('Error serializing component data:', error);
+    }
   };
 
   // Manejar drag de nodos en el canvas
@@ -746,6 +773,7 @@ const FlowEditor = ({
         }
         return node;
       }));
+      setHasUnsavedChanges(true);
       
       // Actualizar la posición del nodo arrastrado para la próxima iteración
       setDraggedNode((prev: any) => ({
@@ -850,12 +878,23 @@ const FlowEditor = ({
     e.preventDefault();
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const component = JSON.parse(e.dataTransfer.getData('component'));
-    const position = {
-      x: (e.clientX - rect.left - offset.x) / scale,
-      y: (e.clientY - rect.top - offset.y) / scale
-    };
-    addNode(component, position);
+    
+    try {
+      const componentData = e.dataTransfer.getData('component');
+      if (!componentData) {
+        console.warn('No component data found in drop event');
+        return;
+      }
+      
+      const component = JSON.parse(componentData);
+      const position = {
+        x: (e.clientX - rect.left - offset.x) / scale,
+        y: (e.clientY - rect.top - offset.y) / scale
+      };
+      addNode(component, position);
+    } catch (error) {
+      console.error('Error parsing dropped component data:', error);
+    }
   };
 
   const handleDragOver = (e: any) => {
@@ -915,6 +954,7 @@ const FlowEditor = ({
           toInput: input
         };
         setConnections([...connections, newConnection]);
+        setHasUnsavedChanges(true);
       }
       setConnectingFrom(null);
     }
@@ -926,6 +966,29 @@ const FlowEditor = ({
   };
 
   // Manejar clic en canvas (para deseleccionar y cancelar conexiones)
+  // Función para manejar la navegación de regreso con confirmación
+  const handleBackToFlowsList = () => {
+    if (hasUnsavedChanges) {
+      setShowExitConfirmation(true);
+    } else {
+      onBackToFlowsList?.();
+    }
+  };
+
+  const handleSaveAndExit = () => {
+    // Aquí iría la lógica de guardado
+    // Por ahora solo limpiamos el estado de cambios sin guardar
+    setHasUnsavedChanges(false);
+    setShowExitConfirmation(false);
+    onBackToFlowsList?.();
+  };
+
+  const handleExitWithoutSaving = () => {
+    setHasUnsavedChanges(false);
+    setShowExitConfirmation(false);
+    onBackToFlowsList?.();
+  };
+
   const handleCanvasClick = (e: any) => {
     // Verificar si el clic NO fue en elementos que deberían manejar sus propios eventos
     const isNodeClick = e.target.closest('[data-node-id]');
@@ -1012,6 +1075,7 @@ const FlowEditor = ({
         ));
         
         clearSelection();
+        setHasUnsavedChanges(true);
       }
     } else if (e.key === 'Escape') {
       clearSelection();
@@ -1679,8 +1743,28 @@ const FlowEditor = ({
         {/* Toolbar */}
         <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" title={t('save')}>
-              <Save className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            {onBackToFlowsList && (
+              <button 
+                onClick={handleBackToFlowsList}
+                className={`p-2 rounded-lg transition ${
+                  hasUnsavedChanges 
+                    ? 'hover:bg-orange-100 dark:hover:bg-orange-900/20 text-orange-600 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-600' 
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
+                }`}
+                title={t('backToFlows')}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              className={`p-2 rounded-lg transition ${
+                hasUnsavedChanges 
+                  ? 'hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 ring-1 ring-blue-300 dark:ring-blue-600' 
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
+              }`} 
+              title={t('save')}
+            >
+              <Save className="w-5 h-5" />
             </button>
             <button 
               onClick={handleUndo}
@@ -1819,7 +1903,8 @@ const FlowEditor = ({
             style={{
               transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
               transformOrigin: '0 0',
-              pointerEvents: 'none'
+              pointerEvents: 'none',
+              overflow: 'visible'
             }}
           >
             {renderedConnections}
@@ -1869,6 +1954,7 @@ const FlowEditor = ({
                             : n
                         )
                       );
+                      setHasUnsavedChanges(true);
                     },
                     onClose: () => {
                       setGlobalPropertyPanelState((prev: any) => ({ ...prev, showProperties: false }));
@@ -2083,9 +2169,46 @@ const FlowEditor = ({
 
           {/* AI Prompt Dialog */}
           {showAIPrompt && <AIPromptDialog />}
-          </div>
+
+          {/* Diálogo de confirmación de salida */}
+          {showExitConfirmation && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96">
+                <div className="flex items-center gap-3 mb-4">
+                  <AlertCircle className="w-6 h-6 text-orange-500" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {t('unsavedChangesTitle')}
+                  </h3>
+                </div>
+                <p className="text-gray-600 dark:text-gray-300 mb-6">
+                  {t('unsavedChangesMessage')}
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setShowExitConfirmation(false)}
+                    className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+                  >
+                    {t('cancel')}
+                  </button>
+                  <button
+                    onClick={handleExitWithoutSaving}
+                    className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                  >
+                    {t('exitWithoutSaving')}
+                  </button>
+                  <button
+                    onClick={handleSaveAndExit}
+                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition"
+                  >
+                    {t('saveAndExit')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+    </div>
     );
 };
 
@@ -2776,6 +2899,7 @@ const App = () => {
           <FlowEditor 
             globalPropertyPanelState={globalPropertyPanelState}
             setGlobalPropertyPanelState={setGlobalPropertyPanelState}
+            onBackToFlowsList={() => setCurrentView('flows')}
           />
         )}
       </div>
