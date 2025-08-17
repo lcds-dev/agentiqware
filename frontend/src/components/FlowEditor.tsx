@@ -443,7 +443,6 @@ const FlowEditor = () => {
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [connectingFrom, setConnectingFrom] = useState<any>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  // Removed unused tempConnection state
   const [showProperties, setShowProperties] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPrompt, setShowAIPrompt] = useState(false);
@@ -534,6 +533,7 @@ const FlowEditor = () => {
   };
 
   // Funciones para manejo de selección múltiple
+  // Funciones para manejo de selección múltiple
   const selectNode = (nodeId: string, isCtrlPressed: boolean = false) => {
     if (isCtrlPressed) {
       const newSelected = new Set(selectedNodes);
@@ -553,7 +553,7 @@ const FlowEditor = () => {
     setSelectedNode(null);
   }, []);
 
-  const selectNodesInBox = (box: {x: number, y: number, width: number, height: number}) => {
+  const selectNodesInBox = useCallback((box: {x: number, y: number, width: number, height: number}) => {
     const selected = new Set<string>();
     nodes.forEach(node => {
       const nodeX = node.position.x;
@@ -570,8 +570,7 @@ const FlowEditor = () => {
       }
     });
     setSelectedNodes(selected);
-  };
-
+  }, [nodes]);
 
 
   // Funciones de clipboard
