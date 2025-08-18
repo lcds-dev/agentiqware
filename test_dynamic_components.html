@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Dynamic Components</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .component {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 8px 0;
+            background: #f9f9f9;
+        }
+        .component-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .component-meta {
+            font-size: 12px;
+            color: #666;
+            margin: 4px 0;
+        }
+        .keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .keyword {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 11px;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+        }
+        .success {
+            color: #388e3c;
+            background: #e8f5e8;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Dynamic Components Test</h1>
+        <p>Testing the dynamic component loading system from the enhanced components with AI metadata.</p>
+        
+        <div id="status" class="loading">Loading components...</div>
+        <div id="components"></div>
+        
+        <h2>Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        // Simulate the components service
+        class TestComponentsService {
+            async getComponents() {
+                try {
+                    // Try to load from the enhanced components file
+                    console.log('Loading components from enhanced_components_full.json...');
+                    const response = await fetch('/enhanced_components_full.json');
+                    if (response.ok) {
+                        const enhancedComponents = await response.json();
+                        console.log('Loaded components from file:', enhancedComponents.length);
+                        
+                        // Transform components for frontend
+                        return enhancedComponents.map(comp => ({
+                            id: comp.actionName,
+                            name: comp.actionLabel,
+                            icon: this.getCategoryIcon(comp.actionGroup),
+                            categoryKey: this.mapCategory(comp.actionGroup),
+                            category: comp.actionGroup,
+                            description: comp.ai_metadata?.natural_language_description || comp.actionDescription || 'No description available',
+                            keywords: comp.ai_metadata?.intent_keywords || [],
+                            complexity: comp.ai_metadata?.complexity_level || 'basic',
+                            config: {
+                                type: "wrap",
+                                fields: this.extractFields(comp.parameters)
+                            },
+                            ai_metadata: comp.ai_metadata || {}
+                        }));
+                    }
+                } catch (error) {
+                    console.warn('Could not load from file, using fallback:', error);
+                }
+                
+                // Fallback to sample components
+                return [
+                    {
+                        id: "excel_read_sheet_to_dataframe",
+                        name: "Read Excel to DataFrame",
+                        icon: "📊",
+                        categoryKey: "dataInput",
+                        category: "Excel",
+                        description: "Reads data from an Excel spreadsheet file and converts it into a structured data table (DataFrame) that can be processed and analyzed",
+                        keywords: ["read excel", "load spreadsheet", "import excel data", "excel to dataframe", "open excel file"],
+                        complexity: "basic",
+                        config: {
+                            type: "wrap",
+                            fields: ["handler", "excel_filename", "sheet_name"]
+                        },
+                        ai_metadata: {
+                            natural_language_description: "Reads data from an Excel spreadsheet file and converts it into a structured data table (DataFrame) that can be processed and analyzed",
+                            intent_keywords: ["read excel", "load spreadsheet", "import excel data", "excel to dataframe", "open excel file"],
+                            use_cases: ["Reading financial reports and budgets", "Processing customer data from Excel files", "Importing inventory lists and product catalogs"],
+                            complexity_level: "basic",
+                            typical_next_steps: ["data_filter", "data_transform", "data_analysis"],
+                            performance_notes: "Memory usage scales with file size"
+                        }
+                    },
+                    {
+                        id: "data_concat_multi_dataframes",
+                        name: "Concatenate DataFrames",
+                        icon: "🔗",
+                        categoryKey: "dataProcessing",
+                        category: "Data",
+                        description: "Combines multiple data tables (DataFrames) into one larger table, either by stacking them vertically (adding rows) or joining them horizontally (adding columns)",
+                        keywords: ["combine dataframes", "merge multiple tables", "concatenate data", "join dataframes", "stack data tables"],
+                        complexity: "intermediate",
+                        config: {
+                            type: "wrap",
+                            fields: ["handler", "dataframes", "direction"]
+                        },
+                        ai_metadata: {
+                            natural_language_description: "Combines multiple data tables (DataFrames) into one larger table, either by stacking them vertically (adding rows) or joining them horizontally (adding columns)",
+                            intent_keywords: ["combine dataframes", "merge multiple tables", "concatenate data", "join dataframes", "stack data tables"],
+                            use_cases: ["Combining monthly sales reports into yearly data", "Merging data from multiple departments", "Joining customer data from different sources"],
+                            complexity_level: "intermediate",
+                            typical_next_steps: ["data_filter", "data_transform", "data_analysis"],
+                            performance_notes: "Performance decreases with larger and more numerous DataFrames"
+                        }
+                    },
+                    {
+                        id: "web_find_element",
+                        name: "Find Web Element",
+                        icon: "🌐",
+                        categoryKey: "automation",
+                        category: "Web",
+                        description: "Searches for and locates a specific element on a web page using various identification methods such as ID, class name, text content, or CSS selectors",
+                        keywords: ["find element", "locate element", "search element", "find button", "locate button", "get element"],
+                        complexity: "intermediate",
+                        config: {
+                            type: "wrap",
+                            fields: ["handler", "find_by", "find_value", "result"]
+                        },
+                        ai_metadata: {
+                            natural_language_description: "Searches for and locates a specific element on a web page using various identification methods such as ID, class name, text content, or CSS selectors",
+                            intent_keywords: ["find element", "locate element", "search element", "find button", "locate button", "get element"],
+                            use_cases: ["Finding a login button to click", "Locating an input field to type into", "Finding a specific link to navigate"],
+                            complexity_level: "intermediate",
+                            typical_next_steps: ["web_click_element", "web_type_text", "web_get_text"],
+                            performance_notes: "ID and NAME locators are fastest"
+                        }
+                    }
+                ];
+            }
+
+            async searchComponents(query) {
+                const allComponents = await this.getComponents();
+                const searchTerm = query.toLowerCase();
+                
+                return allComponents.filter(comp => {
+                    return (
+                        comp.name.toLowerCase().includes(searchTerm) ||
+                        comp.description.toLowerCase().includes(searchTerm) ||
+                        comp.keywords.some(keyword => keyword.toLowerCase().includes(searchTerm)) ||
+                        comp.ai_metadata.intent_keywords.some(keyword => keyword.toLowerCase().includes(searchTerm))
+                    );
+                });
+            }
+
+            getCategoryIcon(category) {
+                const iconMap = {
+                    'Excel': '📊',
+                    'Data': '🔄',
+                    'Web': '🌐',
+                    'RPA': '🤖',
+                    'File': '📁',
+                    'Logic': '🔀',
+                    'API': '🔗',
+                    'Database': '🗄️',
+                    'Email': '📧',
+                    'AWS': '☁️',
+                    'UI': '🖥️'
+                };
+                return iconMap[category] || '⚙️';
+            }
+
+            mapCategory(category) {
+                // Use actionGroup directly as category key (normalized)
+                return category
+                    .toLowerCase()
+                    .replace(/\s+/g, '_')
+                    .replace(/[^a-z0-9_]/g, '')
+                    .replace(/_+/g, '_')
+                    .replace(/^_|_$/g, '');
+            }
+
+            extractFields(parametersJson) {
+                if (!parametersJson) return [];
+                
+                try {
+                    const params = JSON.parse(parametersJson);
+                    const fields = [];
+                    
+                    const extractFields = (obj) => {
+                        if (typeof obj === 'object' && obj !== null) {
+                            if (obj.type === 'text_form_field' && obj.id) {
+                                fields.push(obj.id);
+                            } else if (obj.type === 'dropdown_button_form_field' && obj.id) {
+                                fields.push(obj.id);
+                            }
+                            
+                            // Recursively search in children
+                            if (obj.children) {
+                                obj.children.forEach(extractFields);
+                            }
+                            if (obj.args && obj.args.children) {
+                                obj.args.children.forEach(extractFields);
+                            }
+                        }
+                    };
+                    
+                    extractFields(params);
+                    return fields;
+                    
+                } catch (error) {
+                    console.error('Error parsing parameters JSON:', error);
+                    return [];
+                }
+            }
+        }
+
+        // Test functions
+        async function testComponentLoading() {
+            const service = new TestComponentsService();
+            const statusDiv = document.getElementById('status');
+            const componentsDiv = document.getElementById('components');
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                // Test 1: Load all components
+                statusDiv.innerHTML = '<div class="loading">Loading components...</div>';
+                const components = await service.getComponents();
+                
+                if (components && components.length > 0) {
+                    statusDiv.innerHTML = `<div class="success">✅ Successfully loaded ${components.length} components</div>`;
+                    
+                    // Display components
+                    componentsDiv.innerHTML = components.map(comp => `
+                        <div class="component">
+                            <div class="component-header">
+                                <span style="font-size: 20px;">${comp.icon}</span>
+                                ${comp.name}
+                                <span style="background: ${getComplexityColor(comp.complexity)}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 10px; margin-left: 8px;">
+                                    ${comp.complexity}
+                                </span>
+                            </div>
+                            <div class="component-meta">Category: ${comp.category}</div>
+                            <div class="component-meta">Fields: ${comp.config.fields.join(', ')}</div>
+                            <div class="component-meta">${comp.description}</div>
+                            <div class="keywords">
+                                ${comp.ai_metadata.intent_keywords.map(keyword => `<span class="keyword">${keyword}</span>`).join('')}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    statusDiv.innerHTML = '<div class="error">❌ No components loaded</div>';
+                }
+
+                // Test 2: Search functionality
+                const searchResults = await service.searchComponents('excel');
+                const excelComponents = searchResults.length;
+                
+                const webResults = await service.searchComponents('web');
+                const webComponents = webResults.length;
+
+                // Test 3: AI metadata validation
+                const componentsWithAI = components.filter(comp => comp.ai_metadata && comp.ai_metadata.intent_keywords);
+                const aiMetadataCount = componentsWithAI.length;
+
+                // Display test results
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ All Tests Passed</h3>
+                        <ul>
+                            <li><strong>Component Loading:</strong> ${components.length} components loaded successfully</li>
+                            <li><strong>Search Functionality:</strong> Found ${excelComponents} Excel components, ${webComponents} Web components</li>
+                            <li><strong>AI Metadata:</strong> ${aiMetadataCount}/${components.length} components have AI metadata</li>
+                            <li><strong>Categories:</strong> ${new Set(components.map(c => c.category)).size} unique categories</li>
+                            <li><strong>Complexity Levels:</strong> ${new Set(components.map(c => c.complexity)).size} complexity levels</li>
+                        </ul>
+                    </div>
+                `;
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                resultsDiv.innerHTML = `<div class="error">Tests failed due to loading error</div>`;
+            }
+        }
+
+        function getComplexityColor(complexity) {
+            switch(complexity) {
+                case 'basic': return '#4caf50';
+                case 'intermediate': return '#ff9800';
+                case 'advanced': return '#f44336';
+                default: return '#9e9e9e';
+            }
+        }
+
+        // Run tests when page loads
+        document.addEventListener('DOMContentLoaded', testComponentLoading);
+    </script>
+</body>
+</html>

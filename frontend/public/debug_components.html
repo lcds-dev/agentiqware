@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Components Loading</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffe6e6; color: #cc0000; }
+        .success { background: #e6ffe6; color: #006600; }
+        .info { background: #e6f3ff; color: #0066cc; }
+        .component { border: 1px solid #ddd; margin: 5px 0; padding: 8px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Component Loading Debug</h1>
+    <div id="logs"></div>
+    <div id="components"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(logDiv);
+            console.log(message);
+        }
+
+        async function debugComponentsLoading() {
+            try {
+                log('Starting component loading debug...', 'info');
+                
+                // Step 1: Check if file is accessible
+                log('Step 1: Testing file accessibility...', 'info');
+                const response = await fetch('/enhanced_components_full.json');
+                log(`Response status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                
+                if (!response.ok) {
+                    log('File not accessible, stopping debug', 'error');
+                    return;
+                }
+
+                // Step 2: Parse JSON
+                log('Step 2: Parsing JSON...', 'info');
+                const rawComponents = await response.json();
+                log(`Raw components loaded: ${rawComponents.length}`, 'success');
+
+                // Step 3: Analyze component structure
+                log('Step 3: Analyzing component structure...', 'info');
+                if (rawComponents.length > 0) {
+                    const firstComponent = rawComponents[0];
+                    log(`First component keys: ${Object.keys(firstComponent).join(', ')}`, 'info');
+                    log(`First component actionName: ${firstComponent.actionName}`, 'info');
+                    log(`First component actionGroup: ${firstComponent.actionGroup}`, 'info');
+                    log(`Has ai_metadata: ${!!firstComponent.ai_metadata}`, 'info');
+                }
+
+                // Step 4: Transform components (simulate service logic)
+                log('Step 4: Transforming components...', 'info');
+                const transformedComponents = rawComponents.map(comp => {
+                    // Normalize actionGroup to category key
+                    const normalizedCategoryKey = comp.actionGroup
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^a-z0-9_]/g, '')
+                        .replace(/_+/g, '_')
+                        .replace(/^_|_$/g, '');
+
+                    const iconMap = {
+                        'Excel': '📊',
+                        'Excel Application': '📈',
+                        'Data': '🔄',
+                        'Dataframe': '📋',
+                        'Web': '🌐',
+                        'RPA': '🤖',
+                        'Application': '💻',
+                        'Files': '📁',
+                        'File': '📄',
+                        'Statements': '🔀',
+                        'Logic': '🔀',
+                        'API': '🔗',
+                        'Database': '🗄️',
+                        'Email': '📧',
+                        'AWS': '☁️',
+                        'UI Interface': '🖥️',
+                        'UI': '🖥️',
+                        'System': '⚙️',
+                        'Strings': '🔤',
+                        'Convert': '🔄',
+                        'Variable': '📦',
+                        'Scripts': '📜',
+                        'Arrays': '📚',
+                        'Messages': '💬',
+                        'JSON': '📋',
+                        'AI': '🤖'
+                    };
+
+                    return {
+                        id: comp.actionName,
+                        name: comp.actionLabel,
+                        icon: iconMap[comp.actionGroup] || '⚙️',
+                        categoryKey: normalizedCategoryKey,
+                        category: comp.actionGroup,
+                        description: comp.ai_metadata?.natural_language_description || comp.actionDescription || 'No description available',
+                        keywords: comp.ai_metadata?.intent_keywords || [],
+                        complexity: comp.ai_metadata?.complexity_level || 'basic',
+                        config: {
+                            type: "wrap",
+                            fields: []
+                        },
+                        ai_metadata: comp.ai_metadata || {}
+                    };
+                });
+
+                log(`Transformed components: ${transformedComponents.length}`, 'success');
+
+                // Step 5: Group by categories
+                const categories = [...new Set(transformedComponents.map(c => c.categoryKey))];
+                log(`Categories found: ${categories.join(', ')}`, 'info');
+
+                categories.forEach(categoryKey => {
+                    const categoryComponents = transformedComponents.filter(c => c.categoryKey === categoryKey);
+                    log(`${categoryKey}: ${categoryComponents.length} components`, 'info');
+                });
+
+                // Step 6: Display components
+                log('Step 6: Displaying components...', 'info');
+                const componentsDiv = document.getElementById('components');
+                componentsDiv.innerHTML = '<h2>All Components:</h2>' + 
+                    transformedComponents.map(comp => `
+                        <div class="component">
+                            <strong>${comp.icon} ${comp.name}</strong> 
+                            <span style="color: #666;">(${comp.category})</span><br>
+                            <small>ID: ${comp.id}, Complexity: ${comp.complexity}</small><br>
+                            <small>Keywords: ${comp.keywords.slice(0, 3).join(', ')}...</small>
+                        </div>
+                    `).join('');
+
+                log('Debug completed successfully!', 'success');
+
+            } catch (error) {
+                log(`ERROR: ${error.message}`, 'error');
+                log(`Stack: ${error.stack}`, 'error');
+            }
+        }
+
+        // Run debug when page loads
+        document.addEventListener('DOMContentLoaded', debugComponentsLoading);
+    </script>
+</body>
+</html>
