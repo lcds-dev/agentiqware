@@ -84,8 +84,10 @@ class ComponentsService {
    * Fetch all components from the backend
    */
   async fetchComponents(): Promise<FlowEditorComponent[]> {
+    console.log('🔍 fetchComponents() starting...');
+    
     try {
-      console.log('Fetching components from:', `${this.baseURL}/api/components`);
+      console.log('🌐 Trying to fetch from backend:', `${this.baseURL}/api/components`);
       
       const response = await fetch(`${this.baseURL}/api/components`, {
         method: 'GET',
@@ -95,25 +97,30 @@ class ComponentsService {
       });
 
       if (!response.ok) {
+        console.log('❌ Backend failed with status:', response.status);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const components: EnhancedComponent[] = await response.json();
-      console.log('Received components:', components.length);
+      console.log('✅ Received components from backend:', components.length);
 
       // Transform backend components to frontend format
-      const transformedComponents = components
-        .filter(comp => comp.status === 'S') // Only active components
-        .map(comp => this.transformComponent(comp));
-
+      const activeComponents = components.filter(comp => comp.status === 'S');
+      console.log('🔍 Active components (status=S):', activeComponents.length);
+      
+      const transformedComponents = activeComponents
+        .map(comp => this.transformComponent(comp))
+        .filter(comp => comp !== null) as FlowEditorComponent[];
+      
+      console.log('🔄 Transformed components from backend:', transformedComponents.length);
       this.lastFetch = Date.now();
       return transformedComponents;
 
     } catch (error) {
-      console.error('Error fetching components:', error);
+      console.log('💥 Backend fetch failed:', error instanceof Error ? error.message : String(error));
       
       // Fallback to enhanced components from file
-      console.log('Falling back to enhanced components from enhanced_components_full.json');
+      console.log('📄 Falling back to enhanced_components_full.json');
       return await this.loadEnhancedComponentsFromFile();
     }
   }
@@ -122,18 +129,14 @@ class ComponentsService {
    * Get components with caching
    */
   async getComponents(): Promise<FlowEditorComponent[]> {
-    const now = Date.now();
-    const cacheKey = 'all_components';
+    console.log('🚀 getComponents() called - forcing fresh load for debugging');
     
-    // Check if we have fresh cached data
-    if (this.cache.has(cacheKey) && (now - this.lastFetch) < this.cacheExpiry) {
-      console.log('Returning cached components');
-      return this.cache.get(cacheKey)!;
-    }
-
+    // Force fresh load for debugging
+    this.clearCache();
+    
     // Fetch fresh data
     const components = await this.fetchComponents();
-    this.cache.set(cacheKey, components);
+    console.log('📦 Final components returned from getComponents:', components.length);
     
     return components;
   }
@@ -174,33 +177,57 @@ class ComponentsService {
   /**
    * Transform backend component to frontend format
    */
-  private transformComponent(backendComp: EnhancedComponent): FlowEditorComponent {
-    // Use actionGroup directly as the category key (normalized)
-    const normalizedCategoryKey = this.normalizeCategoryKey(backendComp.actionGroup);
+  private transformComponent(backendComp: EnhancedComponent): FlowEditorComponent | null {
+    try {
+      // Use actionGroup directly as the category key (normalized)
+      const normalizedCategoryKey = this.normalizeCategoryKey(backendComp.actionGroup);
 
-    // Extract icon from SVG or use emoji fallback
-    const icon = this.extractIconFromSvg(backendComp.actionIcon) || this.getCategoryIcon(backendComp.actionGroup);
+      // Extract icon from SVG or use emoji fallback
+      const icon = this.extractIconFromSvg(backendComp.actionIcon) || this.getCategoryIcon(backendComp.actionGroup);
 
-    // Parse parameters to extract fields
-    const fields = this.extractFieldsFromParameters(backendComp.parameters);
+      // Parse parameters to extract fields
+      const fields = this.extractFieldsFromParameters(backendComp.parameters || '{}');
 
-    return {
-      id: backendComp.actionName,
-      nameKey: backendComp.actionName,
-      name: backendComp.actionLabel,
-      icon: icon,
-      categoryKey: normalizedCategoryKey,
-      category: backendComp.actionGroup,
-      description: backendComp.ai_metadata.natural_language_description,
-      keywords: backendComp.ai_metadata.intent_keywords,
-      complexity: backendComp.ai_metadata.complexity_level,
-      config: {
-        type: "wrap",
-        fields: fields,
-        parameters: backendComp.parameters ? JSON.parse(backendComp.parameters) : {}
-      },
-      ai_metadata: backendComp.ai_metadata
-    };
+      return {
+        id: backendComp.actionName,
+        nameKey: backendComp.actionName,
+        name: backendComp.actionLabel,
+        icon: icon,
+        categoryKey: normalizedCategoryKey,
+        category: backendComp.actionGroup,
+        description: backendComp.ai_metadata?.natural_language_description || backendComp.actionDescription,
+        keywords: backendComp.ai_metadata?.intent_keywords || [],
+        complexity: (backendComp.ai_metadata?.complexity_level as 'basic' | 'intermediate' | 'advanced') || 'basic',
+        config: {
+          type: "wrap",
+          fields: fields,
+          parameters: backendComp.parameters ? JSON.parse(backendComp.parameters) : {}
+        },
+        ai_metadata: backendComp.ai_metadata || {
+          natural_language_description: backendComp.actionDescription,
+          intent_keywords: [],
+          use_cases: [],
+          input_requirements: {
+            required_inputs: [],
+            optional_inputs: [],
+            input_types: {}
+          },
+          output_description: {
+            output_type: 'unknown',
+            output_description: '',
+            output_variable: ''
+          },
+          complexity_level: 'basic',
+          dependencies: [],
+          typical_next_steps: [],
+          error_scenarios: [],
+          performance_notes: ''
+        }
+      };
+    } catch (error) {
+      console.error('Error transforming component:', backendComp.actionName, error);
+      return null;
+    }
   }
 
   /**
@@ -311,9 +338,16 @@ class ComponentsService {
         const enhancedComponents: EnhancedComponent[] = await response.json();
         console.log('✅ Loaded enhanced components from file:', enhancedComponents.length);
         
-        const transformed = enhancedComponents.map(comp => this.transformComponent(comp));
+        // Filter only active components first
+        const activeComponents = enhancedComponents.filter(comp => comp.status === 'S');
+        console.log('🔍 Active components (status=S):', activeComponents.length);
+        
+        const transformed = activeComponents
+          .map(comp => this.transformComponent(comp))
+          .filter(comp => comp !== null) as FlowEditorComponent[];
         console.log('🔄 Transformed components:', transformed.length);
         console.log('📊 Component categories:', Array.from(new Set(transformed.map(c => c.categoryKey))));
+        console.log('📋 Sample component names:', transformed.slice(0, 5).map(c => c.name));
         
         return transformed;
       } else {
@@ -574,7 +608,9 @@ class ComponentsService {
       }
     ];
 
-    return enhancedComponents.map(comp => this.transformComponent(comp));
+    return enhancedComponents
+      .map(comp => this.transformComponent(comp))
+      .filter(comp => comp !== null) as FlowEditorComponent[];
   }
 
   /**

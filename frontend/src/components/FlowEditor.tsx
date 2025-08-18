@@ -1,6 +1,26 @@
 import React, { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
 import useUndoable from 'use-undoable';
-import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Save, Play, Undo, Redo, ZoomIn, ZoomOut, GitBranch, Code, Copy, Trash2, Edit3, Home, FileText, Activity, Settings, LogOut, Clock, X, Check, AlertCircle, Globe, Scissors, Clipboard, Moon, Sun, ArrowLeft, Database } from 'lucide-react';
+import { componentsService, FlowEditorComponent } from '../services/componentsService';
+import VariablesManager from './VariablesManager';
+
+// Estilos CSS personalizados para animaciones
+const customStyles = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+`;
 
 // ============================================
 // Sistema de Internacionalización (i18n)
@@ -130,7 +150,104 @@ const translations = {
     pasteNodes: 'Paste',
     
     // Platform Description
-    platformSubtitle: 'RPA & Digital Agents Platform'
+    platformSubtitle: 'RPA & Digital Agents Platform',
+    
+    // Variables Manager
+    flowVariables: 'Flow Variables',
+    closeVariablesPanel: 'Close Variables Panel',
+    variablesFor: 'Variables for',
+    currentFlow: 'current flow',
+    syntax: 'Syntax',
+    flowId: 'Flow ID',
+    createVariable: 'Create Variable',
+    createNewVariable: 'Create New Variable',
+    editVariable: 'Edit Variable',
+    deleteVariable: 'Delete Variable',
+    totalVariables: 'Total Variables',
+    required: 'Required',
+    categories: 'Categories',
+    types: 'Types',
+    searchVariables: 'Search variables...',
+    allCategories: 'All Categories',
+    allTypes: 'All Types',
+    variableName: 'Variable Name',
+    displayLabel: 'Display Label',
+    description: 'Description',
+    type: 'Type',
+    category: 'Category',
+    defaultValue: 'Default Value',
+    thisVariableIsRequired: 'This variable is required',
+    textType: 'Text',
+    number: 'Number',
+    boolean: 'Boolean',
+    password: 'Password',
+    email: 'Email',
+    url: 'URL',
+    date: 'Date',
+    selectType: 'Select',
+    authentication: 'Authentication',
+    configuration: 'Configuration',
+    notifications: 'Notifications',
+    data: 'Data',
+    custom: 'Custom',
+    variableNamePlaceholder: 'variable_name',
+    displayLabelPlaceholder: 'API Key',
+    descriptionPlaceholder: 'Describe how this variable will be used...',
+    useSnakeCaseFormat: 'Use snake_case format (e.g., api_key, user_email)',
+    enterPassword: 'Enter password...',
+    enterNumber: 'Enter number...',
+    optionPlaceholder: 'Option {index}',
+    selectDefaultValue: 'Select default value...',
+    addOption: 'Add Option',
+    options: 'Options',
+    copyVariableSyntax: 'Copy variable syntax',
+    copySyntax: 'Copy syntax',
+    empty: '(empty)',
+    updated: 'Updated',
+    editVariableTooltip: 'Edit variable',
+    deleteVariableTooltip: 'Delete variable',
+    noVariablesFound: 'No variables found',
+    tryAdjustingFilters: 'Try adjusting your search or filters',
+    createFirstVariable: 'Create your first variable to get started',
+    variableCreatedSuccessfully: 'Variable created successfully',
+    variableUpdatedSuccessfully: 'Variable updated successfully',
+    variableDeletedSuccessfully: 'Variable deleted successfully',
+    variablesExportedSuccessfully: 'Variables exported successfully',
+    variablesImportedSuccessfully: '{count} variables imported successfully',
+    errorLoadingVariables: 'Error loading flow variables',
+    errorSavingVariables: 'Error saving flow variables',
+    errorExportingVariables: 'Error exporting variables',
+    errorImportingVariables: 'Error importing variables',
+    invalidFileFormat: 'Invalid file format',
+    noValidVariablesFound: 'No valid variables found in file',
+    nameIsRequired: 'Name is required',
+    nameValidationMessage: 'Name must start with lowercase letter and contain only lowercase letters, numbers, and underscores',
+    variableNameExists: 'Variable name already exists',
+    labelIsRequired: 'Label is required',
+    invalidFormat: 'Invalid {type} format',
+    selectRequiresOptions: 'Select type requires at least one option',
+    deleteConfirmationTitle: 'Delete Variable',
+    deleteConfirmationMessage: 'Are you sure you want to delete this variable? This action cannot be undone.',
+    saving: 'Saving...',
+    preview: 'Preview',
+    export: 'Export',
+    import: 'Import',
+    update: 'Update',
+    create: 'Create',
+    
+    // Toolbar and Component Panel
+    expandAll: 'Expand All',
+    collapseAll: 'Collapse All',
+    all: 'All',
+    none: 'None',
+    resetView: 'Reset View',
+    variables: 'Variables',
+    variablesShort: 'Vars',
+    paste: 'Paste',
+    connection: 'Connection',
+    aiShort: 'AI',
+    runShort: 'Run',
+    dragOrDoubleClickToAdd: 'Drag or double click to add to canvas'
   },
   
   es: {
@@ -256,7 +373,104 @@ const translations = {
     pasteNodes: 'Pegar',
     
     // Platform Description
-    platformSubtitle: 'Plataforma de RPA y Agentes Digitales'
+    platformSubtitle: 'Plataforma de RPA y Agentes Digitales',
+    
+    // Variables Manager
+    flowVariables: 'Variables del Flujo',
+    closeVariablesPanel: 'Cerrar Panel de Variables',
+    variablesFor: 'Variables para',
+    currentFlow: 'flujo actual',
+    syntax: 'Sintaxis',
+    flowId: 'ID del Flujo',
+    createVariable: 'Crear Variable',
+    createNewVariable: 'Crear Nueva Variable',
+    editVariable: 'Editar Variable',
+    deleteVariable: 'Eliminar Variable',
+    totalVariables: 'Total de Variables',
+    required: 'Requeridas',
+    categories: 'Categorías',
+    types: 'Tipos',
+    searchVariables: 'Buscar variables...',
+    allCategories: 'Todas las Categorías',
+    allTypes: 'Todos los Tipos',
+    variableName: 'Nombre de Variable',
+    displayLabel: 'Etiqueta de Visualización',
+    description: 'Descripción',
+    type: 'Tipo',
+    category: 'Categoría',
+    defaultValue: 'Valor por Defecto',
+    thisVariableIsRequired: 'Esta variable es requerida',
+    textType: 'Texto',
+    number: 'Número',
+    boolean: 'Booleano',
+    password: 'Contraseña',
+    email: 'Email',
+    url: 'URL',
+    date: 'Fecha',
+    selectType: 'Selección',
+    authentication: 'Autenticación',
+    configuration: 'Configuración',
+    notifications: 'Notificaciones',
+    data: 'Datos',
+    custom: 'Personalizado',
+    variableNamePlaceholder: 'nombre_variable',
+    displayLabelPlaceholder: 'Clave API',
+    descriptionPlaceholder: 'Describe cómo se usará esta variable...',
+    useSnakeCaseFormat: 'Usa formato snake_case (ej: clave_api, email_usuario)',
+    enterPassword: 'Ingresa contraseña...',
+    enterNumber: 'Ingresa número...',
+    optionPlaceholder: 'Opción {index}',
+    selectDefaultValue: 'Seleccionar valor por defecto...',
+    addOption: 'Agregar Opción',
+    options: 'Opciones',
+    copyVariableSyntax: 'Copiar sintaxis de variable',
+    copySyntax: 'Copiar sintaxis',
+    empty: '(vacío)',
+    updated: 'Actualizado',
+    editVariableTooltip: 'Editar variable',
+    deleteVariableTooltip: 'Eliminar variable',
+    noVariablesFound: 'No se encontraron variables',
+    tryAdjustingFilters: 'Intenta ajustar tu búsqueda o filtros',
+    createFirstVariable: 'Crea tu primera variable para comenzar',
+    variableCreatedSuccessfully: 'Variable creada exitosamente',
+    variableUpdatedSuccessfully: 'Variable actualizada exitosamente',
+    variableDeletedSuccessfully: 'Variable eliminada exitosamente',
+    variablesExportedSuccessfully: 'Variables exportadas exitosamente',
+    variablesImportedSuccessfully: '{count} variables importadas exitosamente',
+    errorLoadingVariables: 'Error al cargar variables del flujo',
+    errorSavingVariables: 'Error al guardar variables del flujo',
+    errorExportingVariables: 'Error al exportar variables',
+    errorImportingVariables: 'Error al importar variables',
+    invalidFileFormat: 'Formato de archivo inválido',
+    noValidVariablesFound: 'No se encontraron variables válidas en el archivo',
+    nameIsRequired: 'El nombre es requerido',
+    nameValidationMessage: 'El nombre debe comenzar con letra minúscula y contener solo letras minúsculas, números y guiones bajos',
+    variableNameExists: 'El nombre de variable ya existe',
+    labelIsRequired: 'La etiqueta es requerida',
+    invalidFormat: 'Formato de {type} inválido',
+    selectRequiresOptions: 'El tipo selección requiere al menos una opción',
+    deleteConfirmationTitle: 'Eliminar Variable',
+    deleteConfirmationMessage: '¿Estás seguro de que quieres eliminar esta variable? Esta acción no se puede deshacer.',
+    saving: 'Guardando...',
+    preview: 'Vista previa',
+    export: 'Exportar',
+    import: 'Importar',
+    update: 'Actualizar',
+    create: 'Crear',
+    
+    // Toolbar and Component Panel
+    expandAll: 'Expandir Todo',
+    collapseAll: 'Contraer Todo',
+    all: 'Todo',
+    none: 'Ninguno',
+    resetView: 'Restablecer Vista',
+    variables: 'Variables',
+    variablesShort: 'Vars',
+    paste: 'Pegar',
+    connection: 'Conexión',
+    aiShort: 'IA',
+    runShort: 'Ejec',
+    dragOrDoubleClickToAdd: 'Arrastra o doble clic para agregar al canvas'
   }
 };
 
@@ -278,7 +492,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 // Hook personalizado para usar tema
-const useTheme = () => {
+export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
     throw new Error('useTheme must be used within a ThemeProvider');
@@ -336,6 +550,9 @@ const useTranslation = () => {
   }
   return context;
 };
+
+// Export useTranslation for use in other components
+export const useFlowTranslation = useTranslation;
 
 // Proveedor de idioma
 const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
@@ -475,80 +692,135 @@ const FlowEditor = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   const [showInsertMenu, setShowInsertMenu] = useState<{connectionId: string, x: number, y: number, canvasX?: number, canvasY?: number} | null>(null);
+  
+  // Variables management states for current flow
+  const [currentFlowId, setCurrentFlowId] = useState<string>(() => {
+    // Generate a unique flow ID for this editing session
+    return `flow_${Date.now().toString().slice(-8)}`;
+  });
+  const [currentFlowName, setCurrentFlowName] = useState<string>('Current Flow');
+  const [showVariablesPanel, setShowVariablesPanel] = useState(false);
 
   // Componentes disponibles con traducciones
-  const availableComponents = [
-    {
-      id: 'file_search',
-      nameKey: 'fileSearch',
-      icon: '📁',
-      categoryKey: 'fileSystem',
-      config: {
-        type: "wrap",
-        fields: ['folder', 'pattern', 'include_subfolders', 'result']
+  // State for components loaded from service
+  const [availableComponents, setAvailableComponents] = useState<FlowEditorComponent[]>([]);
+  const [componentsLoading, setComponentsLoading] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    // Cargar estado guardado del localStorage
+    try {
+      const saved = localStorage.getItem('expandedGroups');
+      if (saved) {
+        return new Set(JSON.parse(saved));
       }
-    },
-    {
-      id: 'dataframe_merge',
-      nameKey: 'mergeDataFrames',
-      icon: '🔗',
-      categoryKey: 'dataProcessing',
-      config: {
-        type: "wrap",
-        fields: ['handler', 'dataframes', 'direction']
-      }
-    },
-    {
-      id: 'excel_reader',
-      nameKey: 'readExcel',
-      icon: '📊',
-      categoryKey: 'dataInput',
-      config: {
-        type: "wrap",
-        fields: ['excel_file_name', 'sheet_name', 'destination']
-      }
-    },
-    {
-      id: 'condition',
-      nameKey: 'ifCondition',
-      icon: '🔀',
-      categoryKey: 'controlFlow',
-      config: {
-        type: "condition",
-        fields: ['condition', 'operator', 'value']
-      }
-    },
-    {
-      id: 'mouse_click',
-      nameKey: 'mouseClick',
-      icon: '🖱️',
-      categoryKey: 'automation',
-      config: {
-        type: "automation",
-        fields: ['x', 'y', 'button', 'clicks']
-      }
-    },
-    {
-      id: 'keyboard_input',
-      nameKey: 'keyboardInput',
-      icon: '⌨️',
-      categoryKey: 'automation',
-      config: {
-        type: "automation",
-        fields: ['text', 'delay', 'special_keys']
-      }
+    } catch (error) {
+      console.warn('Error loading expanded groups from localStorage:', error);
     }
-  ];
+    // Default groups to expand
+    return new Set(['statements', 'files', 'variables']);
+  });
+
+  // Inyectar estilos CSS personalizados
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = customStyles;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
+  // Load components from service
+  useEffect(() => {
+    const loadComponents = async () => {
+      try {
+        console.log('🔄 FlowEditor: Loading components from service...');
+        setComponentsLoading(true);
+        const components = await componentsService.getComponents();
+        console.log('✅ FlowEditor: Loaded components:', components.length);
+        setAvailableComponents(components);
+      } catch (error) {
+        console.error('❌ FlowEditor: Error loading components:', error);
+        // Fallback to hardcoded components
+        setAvailableComponents([
+          {
+            id: 'file_search',
+            nameKey: 'fileSearch',
+            name: 'File Search',
+            icon: '📁',
+            categoryKey: 'fileSystem',
+            category: 'File System',
+            description: 'Search for files',
+            keywords: ['file', 'search'],
+            complexity: 'basic',
+            config: {
+              type: "wrap",
+              fields: ['folder', 'pattern', 'include_subfolders', 'result'],
+              parameters: {}
+            },
+            ai_metadata: {
+              natural_language_description: 'Search for files',
+              intent_keywords: ['file', 'search'],
+              use_cases: [],
+              input_requirements: { required_inputs: [], optional_inputs: [], input_types: {} },
+              output_description: { output_type: 'file_list', output_description: 'List of files', output_variable: 'result' },
+              complexity_level: 'basic',
+              dependencies: [],
+              typical_next_steps: [],
+              error_scenarios: [],
+              performance_notes: ''
+            }
+          }
+        ]);
+      } finally {
+        setComponentsLoading(false);
+      }
+    };
+
+    loadComponents();
+  }, []);
+
+  // Guardar estado de grupos expandidos en localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('expandedGroups', JSON.stringify(Array.from(expandedGroups)));
+    } catch (error) {
+      console.warn('Error saving expanded groups to localStorage:', error);
+    }
+  }, [expandedGroups]);
 
   // Obtener categorías únicas
   const categories = Array.from(new Set(availableComponents.map(c => c.categoryKey)));
+
+  // Función para toggle el estado de expansión de un grupo
+  const toggleGroupExpansion = (categoryKey: string) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryKey)) {
+        newSet.delete(categoryKey);
+      } else {
+        newSet.add(categoryKey);
+      }
+      return newSet;
+    });
+  };
+
+  // Función para expandir todos los grupos
+  const expandAllGroups = () => {
+    setExpandedGroups(new Set(categories));
+  };
+
+  // Función para contraer todos los grupos
+  const collapseAllGroups = () => {
+    setExpandedGroups(new Set());
+  };
 
   // Agregar nodo al canvas
   const addNode = (component: any, position: any) => {
     const newNode = {
       id: `node_${Date.now()}`,
       type: component.id,
-      name: t(component.nameKey),
+      name: component.name,
       icon: component.icon,
       position: position || { x: 300 + Math.random() * 200, y: 150 + Math.random() * 200 },
       config: { ...component.config },
@@ -1649,7 +1921,7 @@ const FlowEditor = ({
               style={{ pointerEvents: 'auto' }}
             >
               <span className="text-lg">{component.icon}</span>
-              <span>{t(component.nameKey)}</span>
+              <span>{component.name}</span>
             </button>
           ))}
         </div>
@@ -1708,169 +1980,262 @@ const FlowEditor = ({
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={expandAllGroups}
+              className="flex-1 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+            >
+              {t('expandAll')}
+            </button>
+            <button
+              onClick={collapseAllGroups}
+              className="flex-1 px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              {t('collapseAll')}
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
-          {categories.map(categoryKey => (
-            <div key={categoryKey}>
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                {t(categoryKey)}
-              </h3>
-              <div className="space-y-1">
-                {availableComponents
-                  .filter(c => c.categoryKey === categoryKey)
-                  .filter(c => t(c.nameKey).toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(component => (
-                    <div
-                      key={component.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, component)}
-                      className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-grab hover:bg-blue-50 dark:hover:bg-blue-900 hover:scale-105 transition-all duration-200 active:cursor-grabbing active:scale-95"
-                    >
-                      <span className="text-xl">{component.icon}</span>
-                      <span className="text-sm text-gray-700 dark:text-gray-200">{t(component.nameKey)}</span>
-                    </div>
-                  ))}
+          {categories.map(categoryKey => {
+            // Find a component in this category to get the original actionGroup name
+            const firstComponent = availableComponents.find(c => c.categoryKey === categoryKey);
+            const categoryName = firstComponent?.category || categoryKey;
+            const isExpanded = expandedGroups.has(categoryKey);
+            
+            // Filter components for this category
+            const categoryComponents = availableComponents
+              .filter(c => c.categoryKey === categoryKey)
+              .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+            
+            return (
+              <div key={categoryKey}>
+                <button
+                  onClick={() => toggleGroupExpansion(categoryKey)}
+                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    {categoryName}
+                    <span className="bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded-full text-[10px] font-normal">
+                      {categoryComponents.length}
+                    </span>
+                  </span>
+                  <span className={`text-sm opacity-60 transition-transform duration-200 ${isExpanded ? 'rotate-0' : 'rotate-90'}`}>
+                    ⌄
+                  </span>
+                </button>
+                <div 
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                  }`}
+                >
+                  <div className="space-y-1 mb-4 pt-1">
+                    {categoryComponents.map((component, index) => (
+                      <div
+                        key={component.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, component)}
+                        onDoubleClick={() => addNode(component, null)}
+                        className={`flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-grab hover:bg-blue-50 dark:hover:bg-blue-900 hover:scale-105 transition-all duration-200 active:cursor-grabbing active:scale-95 select-none ${
+                          isExpanded ? 'animate-fade-in' : ''
+                        }`}
+                        style={{
+                          animationDelay: isExpanded ? `${index * 50}ms` : '0ms'
+                        }}
+                        title={t('dragOrDoubleClickToAdd')}
+                      >
+                        <span className="text-xl">{component.icon}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-200">{component.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
       {/* Canvas principal */}
       <div className="flex-1 flex flex-col">
-        {/* Toolbar */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {onBackToFlowsList && (
+        {/* Toolbar - Redesigned for better space utilization */}
+        <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            {/* Left Section - Navigation & Core Editing */}
+            <div className="flex items-center gap-1">
+              {onBackToFlowsList && (
+                <button 
+                  onClick={handleBackToFlowsList}
+                  className={`p-1.5 rounded-md transition ${
+                    hasUnsavedChanges 
+                      ? 'hover:bg-orange-100 dark:hover:bg-orange-900/20 text-orange-600 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-600' 
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
+                  }`}
+                  title={t('backToFlows')}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              )}
               <button 
-                onClick={handleBackToFlowsList}
-                className={`p-2 rounded-lg transition ${
+                className={`p-1.5 rounded-md transition ${
                   hasUnsavedChanges 
-                    ? 'hover:bg-orange-100 dark:hover:bg-orange-900/20 text-orange-600 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-600' 
+                    ? 'hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 ring-1 ring-blue-300 dark:ring-blue-600' 
                     : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-                title={t('backToFlows')}
+                }`} 
+                title={t('save')}
               >
-                <ArrowLeft className="w-5 h-5" />
+                <Save className="w-4 h-4" />
               </button>
-            )}
-            <button 
-              className={`p-2 rounded-lg transition ${
-                hasUnsavedChanges 
-                  ? 'hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 ring-1 ring-blue-300 dark:ring-blue-600' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-              }`} 
-              title={t('save')}
-            >
-              <Save className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={handleUndo}
-              disabled={!canUndo}
-              className={`p-2 rounded-lg transition ${
-                canUndo 
-                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
-                  : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              }`} 
-              title={t('undo')}
-            >
-              <Undo className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={handleRedo}
-              disabled={!canRedo}
-              className={`p-2 rounded-lg transition ${
-                canRedo 
-                  ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
-                  : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              }`} 
-              title={t('redo')}
-            >
-              <Redo className="w-5 h-5" />
-            </button>
-            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
-            <button
-              onClick={() => handleZoom(0.1)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-              title={t('zoomIn')}
-            >
-              <ZoomIn className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
-            <span className="text-sm font-medium px-2 text-gray-900 dark:text-gray-100">{Math.round(scale * 100)}%</span>
-            <button
-              onClick={() => handleZoom(-0.1)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-              title={t('zoomOut')}
-            >
-              <ZoomOut className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
-            <button
-              onClick={() => {
-                setScale(1);
-                setOffset({ x: 0, y: 0 });
-              }}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
-              title="Reset View"
-            >
-              Reset
-            </button>
-            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
-            <button
-              onClick={() => {
-                const allNodeIds = new Set(nodes.map(node => node.id));
-                setSelectedNodes(allNodeIds);
-              }}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
-              title={t('selectAll')}
-            >
-              {t('selectAll')}
-            </button>
-            <button
-              onClick={clearSelection}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
-              title={t('clearSelection')}
-            >
-              {t('clearSelection')}
-            </button>
-            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
-            <button
-              onClick={() => setConnectionOrientation(connectionOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
-              className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
-              title={`Connection orientation: ${connectionOrientation}`}
-            >
-              {connectionOrientation === 'horizontal' ? '↔' : '↕'}
-              {connectionOrientation === 'horizontal' ? 'Horizontal' : 'Vertical'}
-            </button>
-            {clipboard && clipboard.nodes.length > 0 && (
-              <>
-                <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
+              
+              <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
+              
+              {/* Undo/Redo Group */}
+              <div className="flex items-center">
+                <button 
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  className={`p-1.5 rounded-l-md transition ${
+                    canUndo 
+                      ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
+                      : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  }`} 
+                  title={t('undo')}
+                >
+                  <Undo className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  className={`p-1.5 rounded-r-md transition border-l border-gray-200 dark:border-gray-600 ${
+                    canRedo 
+                      ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300' 
+                      : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  }`} 
+                  title={t('redo')}
+                >
+                  <Redo className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Center Section - View Controls */}
+            <div className="flex items-center gap-1">
+              {/* Zoom Controls Group */}
+              <div className="flex items-center bg-gray-50 dark:bg-gray-700 rounded-md p-0.5">
+                <button
+                  onClick={() => handleZoom(0.1)}
+                  className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-300 transition"
+                  title={t('zoomIn')}
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-medium px-2 min-w-[3rem] text-center text-gray-900 dark:text-gray-100">
+                  {Math.round(scale * 100)}%
+                </span>
+                <button
+                  onClick={() => handleZoom(-0.1)}
+                  className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-300 transition"
+                  title={t('zoomOut')}
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <div className="w-px h-4 bg-gray-300 dark:bg-gray-500 mx-1" />
+                <button
+                  onClick={() => {
+                    setScale(1);
+                    setOffset({ x: 0, y: 0 });
+                  }}
+                  className="px-2 py-1 hover:bg-white dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-300 transition"
+                  title={t('resetView')}
+                >
+                  1:1
+                </button>
+              </div>
+
+              {/* Selection Tools - Hidden on small screens */}
+              <div className="hidden md:flex items-center gap-1 ml-2">
+                <button
+                  onClick={() => {
+                    const allNodeIds = new Set(nodes.map(node => node.id));
+                    setSelectedNodes(allNodeIds);
+                  }}
+                  className="px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-xs font-medium text-gray-700 dark:text-gray-300 transition"
+                  title={t('selectAll')}
+                >
+                  {t('all')}
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-xs font-medium text-gray-700 dark:text-gray-300 transition"
+                  title={t('clearSelection')}
+                >
+                  {t('none')}
+                </button>
+              </div>
+
+              {/* Connection Orientation - Hidden on small screens */}
+              <div className="hidden lg:block ml-2">
+                <button
+                  onClick={() => setConnectionOrientation(connectionOrientation === 'horizontal' ? 'vertical' : 'horizontal')}
+                  className="flex items-center gap-1 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-xs font-medium text-gray-700 dark:text-gray-300 transition"
+                  title={`${t('connection')}: ${connectionOrientation === 'horizontal' ? t('horizontal') : t('vertical')}`}
+                >
+                  {connectionOrientation === 'horizontal' ? '↔' : '↕'}
+                </button>
+              </div>
+
+              {/* Paste Button - Only when clipboard has content */}
+              {clipboard && clipboard.nodes.length > 0 && (
                 <button
                   onClick={pasteNodes}
-                  className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition text-xs font-medium text-gray-700 dark:text-gray-300"
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition text-xs font-medium"
                   title={t('pasteNodes')}
                 >
-                  <Clipboard className="w-4 h-4" />
-                  {t('pasteNodes')} ({clipboard.nodes.length})
+                  <Clipboard className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('paste')}</span> ({clipboard.nodes.length})
                 </button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2">
-            <ThemeSelector />
-            <LanguageSelector />
-            <button
-              onClick={() => setShowAIPrompt(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition"
-            >
-              <Code className="w-4 h-4" />
-              {t('generateWithAI')}
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-              <Play className="w-4 h-4" />
-              {t('runFlow')}
-            </button>
+            {/* Right Section - Actions */}
+            <div className="flex items-center gap-1">
+              {/* Settings Group - Hidden on small screens */}
+              <div className="hidden md:flex items-center gap-1">
+                <ThemeSelector />
+                <LanguageSelector />
+              </div>
+              
+              <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block" />
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowAIPrompt(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-md hover:opacity-90 transition text-sm font-medium"
+                >
+                  <Code className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('generateWithAI')}</span>
+                  <span className="sm:hidden">{t('aiShort')}</span>
+                </button>
+                
+                <button 
+                  onClick={() => setShowVariablesPanel(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition text-sm font-medium"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('variables')}</span>
+                  <span className="sm:hidden">{t('variablesShort')}</span>
+                </button>
+                
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition text-sm font-medium"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('runFlow')}</span>
+                  <span className="sm:hidden">{t('runShort')}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2202,6 +2567,20 @@ const FlowEditor = ({
                     {t('saveAndExit')}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Variables Panel Modal */}
+          {showVariablesPanel && currentFlowId && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl h-5/6 overflow-hidden">
+                <VariablesManager 
+                  flowId={currentFlowId}
+                  flowName={currentFlowName}
+                  onClose={() => setShowVariablesPanel(false)}
+                  compact={true}
+                />
               </div>
             </div>
           )}
@@ -2706,6 +3085,7 @@ const App = () => {
     { id: 2, name: 'Data Migration', status: 'inactive', lastRun: '1', runs: 12 },
     { id: 3, name: 'Report Generation', status: 'active', lastRun: '30', runs: 128 }
   ]);
+  
 
   const renderDashboard = () => (
     <div className="p-8">
