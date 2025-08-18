@@ -59,3 +59,32 @@ credentials.json
 
 # Nested git repositories
 agentiqware/
+
+# Development and testing files
+*.json.backup
+*_test.json
+*_components.json
+firestore_components_test.json
+enhanced_components_full.json
+
+# Python scripts for development/testing
+import_components_to_firestore.py
+import_with_native_firestore.py
+test_firestore_api.py
+check_*.py
+create_test_data.py
+import_components_simple.py
+import_enhanced_components.py
+setup_firestore_connection.py
+test_backend_simple.py
+test_components_file.py
+
+# HTML test files
+test_dynamic_components.html
+
+# Temporary i18n development files
+frontend/src/i18n/
+frontend/src/hooks/useLanguage.ts
+
+# Component development files
+backend/enhanced_components_full.json
