@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from routers import auth, flows, billing, admin, webhooks
+from routers import auth, flows, billing, admin, webhooks, components
 
 # Import middleware
 from middleware.authentication import verify_token
@@ -70,6 +70,7 @@ app.include_router(flows.router, prefix="/api/v1/flows", tags=["Flows"])
 app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
+app.include_router(components.router, prefix="/api", tags=["Components"])
 
 # Health check endpoint
 @app.get("/health")
